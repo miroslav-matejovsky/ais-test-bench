@@ -61,6 +61,9 @@
     ]
   },
   "cSpell.words": [
+    "adrianmo",
+    "AIVDM",
+    "checksummed",
     "deadcode",
     "fe3dback",
     "frontends",
@@ -74,9 +77,12 @@
     "LASTEXITCODE",
     "matejovsky",
     "miroslav",
+    "mmsi",
     "NMEA",
     "overcomplicate",
     "pkgname",
+    "RAIM",
+    "stretchr",
     "taskfile"
   ]
 }

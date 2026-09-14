@@ -5,14 +5,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
 )
 
 func TestHandler(t *testing.T) {
-	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler))
+	simulator, err := simulation.New(time.Now(), 1)
+	require.NoError(t, err)
+	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler), simulator)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -39,7 +43,7 @@ func TestHandler(t *testing.T) {
 			name:       "display page",
 			path:       "/display",
 			wantStatus: http.StatusOK,
-			contains:   []string{"<title>Display", "<h1>Display</h1>", `hx-get="/status"`},
+			contains:   []string{"<title>Display", "<h1>Display</h1>", `id="map"`, "leaflet@1.9.4", "/static/js/display.js"},
 		},
 		{
 			name:       "status full page",
@@ -99,7 +103,9 @@ func TestHandler(t *testing.T) {
 }
 
 func TestHandlerSetsVaryOnPages(t *testing.T) {
-	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler))
+	simulator, err := simulation.New(time.Now(), 1)
+	require.NoError(t, err)
+	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler), simulator)
 	require.NoError(t, err)
 
 	rec := httptest.NewRecorder()

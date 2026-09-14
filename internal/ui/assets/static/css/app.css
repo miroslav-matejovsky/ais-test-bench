@@ -17,3 +17,28 @@ nav {
     display: flex;
     gap: 1rem;
 }
+
+#map {
+    height: 65vh;
+    min-height: 24rem;
+    background: #dceaf0;
+    border: 1px solid #a8bcc7;
+}
+
+.toolbar, form {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+button, input {
+    font: inherit;
+    padding: 0.5rem 0.75rem;
+}
+
+input[type="number"] { width: 6rem; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; }
+pre { padding: 1rem; background: #f1f5f7; overflow-x: auto; min-height: 5rem; }
+.vessel-details { white-space: pre-line; }

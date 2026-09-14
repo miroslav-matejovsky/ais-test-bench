@@ -1,8 +1,25 @@
 {{define "page:title"}}Manager{{end}}
 
+{{define "page:head"}}
+<script defer src="/static/js/manager.js"></script>
+{{end}}
+
 {{define "page:content"}}
 <h1>Manager</h1>
-<p>Scenarios, targets, and simulator control will live here.</p>
+<p>Manage the active fleet. New vessels start at random positions off Rotterdam.</p>
+<form id="vessel-form">
+    <label for="vessel-count">Number of vessels (0-100)</label>
+    <input id="vessel-count" name="count" type="number" min="0" max="100" step="1" required disabled>
+    <button id="apply-count" type="submit" disabled>Apply</button>
+</form>
+<p>Set the count to 0 to stop generating messages. Restarting resets the fleet and message history.</p>
+<p id="save-status" role="status"></p>
+<p id="fleet-status" role="status">Connecting...</p>
+<h2>Latest AIS messages</h2>
+<p>The latest 1,000 reports are held in memory. The last 10 are shown here.</p>
+<pre id="messages">Loading messages...</pre>
+<p><a href="/display">Open live display</a> | <a href="/api/messages">View stored messages as JSON</a></p>
 <button hx-get="/status" hx-target="#status">Check server status</button>
 <div id="status"></div>
+<noscript>Enable JavaScript to manage vessels.</noscript>
 {{end}}

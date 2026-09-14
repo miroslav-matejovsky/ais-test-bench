@@ -1,6 +1,7 @@
 # Targets
 
-Vessel definitions, navigation state, tracks, and deterministic movement contracts. Active run snapshots are separate from saved vessel definitions.
+Design values and contracts for vessel definitions, navigation state, tracks,
+and movement. The running fleet and its snapshots live in the simulation package.
 
 Subpackages document their public contracts, responsibilities, and dependencies in
-`doc.go`. See [the package catalog](../../docs/packages.md).
+`doc.go`. See the [running architecture](../../README.md).

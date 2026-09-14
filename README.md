@@ -1,79 +1,73 @@
 # AIS Test Bench
 
-AIS Test Bench is a local AIS simulation and testing environment for development,
-integration, and demonstrations. The design generates synthetic vessel traffic
-and publishes AIS/NMEA over TCP and UDP. It uses no RF transmission.
+A local AIS simulator with a live vessel map and a manager UI. One random vessel
+starts automatically in the North Sea off Rotterdam. The manager can set the fleet to 0-100
+vessels. Each vessel has a stable synthetic MMSI, a name, and a random speed and
+course. Positions advance once per second at the reported speed.
 
-This repository is in the design phase. The executable starts an HTTP server with
-placeholder Manager and Display UIs. Bounded contexts contain domain values and
-public interfaces; runtime services are not implemented yet.
-
-## Architecture
-
-One executable, `cmd/ais-test-bench`, owns HTTP, both UIs, simulation, and TCP/UDP
-publishing in a single process. A modular monolith keeps deployment local while
-preserving six DDD-inspired boundaries:
-
-| Context | Ownership |
-| --- | --- |
-| Simulation | Scenarios, lifecycle, virtual time, playback, tick orchestration |
-| AIS | Report generation, encoding, NMEA framing, publication contracts |
-| Targets | Vessels, navigation, tracks, deterministic movement models |
-| Networking | TCP clients, UDP destinations, bounded queues, socket lifecycle |
-| Management | Validated scenario/target CRUD, simulator control, system status |
-| Visualization | Target projections, selection queries, local chart abstraction |
-
-```mermaid
-flowchart LR
-    Manager["Manager UI"] --> Management
-    Manager --> Simulation
-    Display["Display UI"] --> Visualization
-    Management --> Simulation
-    Management --> Targets
-    Visualization --> Snapshots["Live target snapshots"]
-    Simulation --> Targets
-    Simulation --> AIS
-    Targets --> Snapshots
-    AIS --> Ports["Publisher ports"]
-    TCP["TCP adapter"] -. implements .-> Ports
-    UDP["UDP adapter"] -. implements .-> Ports
-```
-
-The diagram shows runtime collaboration. Compile-time dependencies point inward:
-infrastructure implements application ports, application uses domain values, and
-domain packages use only the standard library. Cross-context mappings live in
-application-facing adapters. `internal/app` is the composition root.
-
-Interfaces live near consumers. Domain objects carry no HTTP, persistence, socket,
-or UI dependencies. Manager and Display share use cases and consistent snapshots.
-The simulator alone controls virtual time. Direct calls handle the main traffic
-pipeline; a typed in-process event bus is reserved for lifecycle notifications.
-
-## User interfaces
-
-| Route | Purpose |
-| --- | --- |
-| /manager | Manager: scenarios, targets, simulator control, system status |
-| /display | Display: charts, targets, AIS labels, selection, playback |
-
-Both UIs are server-rendered with `html/template` and htmx 4, in `internal/ui`.
-Templates, CSS, and a vendored htmx build are embedded in the binary, so no Node
-toolchain is needed. See [startup](docs/startup.md) for routes and rendering rules.
-
-## Development
-
-Use the Go version declared in `go.mod`. Checks use Task, PowerShell,
-golangci-lint, deadcode, and gotestsum.
+## Run
 
 ```text
-task run                                          # http://localhost:8080
-go run ./cmd/ais-test-bench -addr localhost:9000  # http://localhost:9000
+task run
+```
+
+Open [Manager](http://localhost:8080/manager) to adjust the vessel count and inspect
+recent messages. Open [Display](http://localhost:8080/display) for the live map.
+Both pages see the same simulation, including changes made in other browser tabs.
+
+The display uses Leaflet 1.9.4 and OpenStreetMap tiles. The browser needs internet
+access to load Leaflet and map tiles. Application templates, CSS, JavaScript, and
+htmx are embedded in the executable. No Node build is required.
+
+```text
+go run ./cmd/ais-test-bench -addr localhost:9000
 task all
 ```
 
-`-addr` (host:port) is the only parameter. The host is required, so the server
-never binds all interfaces by accident.
+`-addr` (host:port) is the only parameter. An explicit host is required.
+Development checks use the Go version in `go.mod`, Task, PowerShell,
+golangci-lint, deadcode, and gotestsum.
 
-Production concerns are part of the contracts: early validation, bounded queues,
-finite I/O deadlines, deterministic time, structured errors, observable connection
-failures, and bounded shutdown. Remaining work is listed in [.todo](.todo).
+## Architecture
+
+One Go executable owns the simulation, in-memory state, HTTP API, and both UIs.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/app` | Start the simulator and HTTP server; stop both on cancellation |
+| `internal/simulation` | Random fleet, movement, synchronized snapshots, recent message history |
+| `internal/ais` | Encode AIS type 1 position reports; validate NMEA with go-nmea |
+| `internal/ui` | HTML pages, embedded assets, JSON API |
+
+The simulator creates a report immediately for every new vessel and after each
+one-second movement tick. Reports contain MMSI, position, speed, course, heading,
+and UTC seconds, framed as checksummed `!AIVDM` sentences with CRLF. The small
+encoder uses [go-nmea](https://github.com/adrianmo/go-nmea) to validate each sentence.
+The simplified fixed cadence supports live development. Names are UI metadata.
+
+The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
+removes active vessels while preserving retained reports. Setting the count to
+zero stops message generation. Restarting resets the fleet and all history.
+
+The original domain/application contract subpackages and the targets, networking,
+management, and visualization folders remain as design scaffolding. The running
+scenario uses the four concrete packages above. TCP/UDP publishing, playback,
+additional message types, and route planning are future design work.
+
+## HTTP API
+
+Both UIs poll once per second. JSON responses use `Cache-Control: no-store`.
+
+| Method | Path | Response / input |
+| --- | --- | --- |
+| GET | `/api/vessels` | `{ "vessels": [...], "messageCount": 1, "messageLimit": 1000, "updatedAt": "..." }` |
+| PUT | `/api/vessels` | Accepts `{ "count": 3 }`; returns the updated vessel snapshot |
+| GET | `/api/messages` | Retained `{ "mmsi": ..., "timestamp": "...", "sentence": "!AIVDM,...\r\n" }` reports |
+
+`PUT` requires `Content-Type: application/json` and an integer count from 0 to 100.
+Malformed input returns 400; other content types return 415. A vessel includes
+`mmsi`, `name`, `latitude`, `longitude`, `speed` (knots), `course` and `heading`
+(degrees), and `updatedAt` (UTC). An empty fleet is an empty JSON array.
+
+Movement follows the current speed and course over the earth's surface. Random
+starting positions are offshore; this first scenario has no coastline avoidance.

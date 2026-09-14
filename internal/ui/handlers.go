@@ -5,13 +5,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui/assets"
 )
 
 type server struct {
-	logger  *slog.Logger
-	html    *renderer
-	started time.Time
+	logger    *slog.Logger
+	html      *renderer
+	started   time.Time
+	simulator *simulation.Simulator
 }
 
 // NewHandler returns the UI routes:
@@ -21,14 +23,17 @@ type server struct {
 //	GET /display    Display UI
 //	GET /status     server status, a fragment for htmx partial requests
 //	GET /static/    embedded static files
+//	GET /api/vessels    current vessels and message count
+//	PUT /api/vessels    set vessel count with {"count": N}
+//	GET /api/messages   retained AIS reports, oldest first
 //
 // Uptime reported by /status is measured from the NewHandler call.
-func NewHandler(logger *slog.Logger) (http.Handler, error) {
+func NewHandler(logger *slog.Logger, simulator *simulation.Simulator) (http.Handler, error) {
 	html, err := newRenderer(assets.HTMLFiles, "base.tmpl")
 	if err != nil {
 		return nil, err
 	}
-	s := &server{logger: logger, html: html, started: time.Now()}
+	s := &server{logger: logger, html: html, started: time.Now(), simulator: simulator}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static", http.FileServerFS(assets.StaticFiles)))
@@ -36,6 +41,9 @@ func NewHandler(logger *slog.Logger) (http.Handler, error) {
 	mux.HandleFunc("GET /manager", s.page("pages/manager.tmpl"))
 	mux.HandleFunc("GET /display", s.page("pages/display.tmpl"))
 	mux.HandleFunc("GET /status", s.status)
+	mux.HandleFunc("GET /api/vessels", s.vessels)
+	mux.HandleFunc("PUT /api/vessels", s.setVesselCount)
+	mux.HandleFunc("GET /api/messages", s.messages)
 	return mux, nil
 }
 

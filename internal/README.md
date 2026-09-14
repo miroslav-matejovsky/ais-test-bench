@@ -1,11 +1,11 @@
 # Internal packages
 
-The modular monolith contains six bounded contexts: simulation, AIS, targets,
-networking, management, and visualization. Application composition lives in
-`app`; the server-rendered Manager and Display UIs live in `ui`.
+The running test bench uses `app` for lifecycle and composition, `simulation`
+for the shared fleet and in-memory messages, `ais` for position report encoding,
+and `ui` for HTML, static assets, and the JSON API.
 
-Domain packages define values and invariants. Application packages define use
-cases and consumer-owned ports. Infrastructure packages host concrete adapters.
-Only `app` assembles implementations across contexts.
+The domain/application subpackages and the targets, networking, management, and
+visualization folders hold the original design contracts. Runtime services use
+the concrete packages directly. Package documentation lives in `doc.go`.
 
-See [the package catalog](../docs/packages.md) for interfaces and dependency rules.
+See the [project README](../README.md) for the running architecture and API.
