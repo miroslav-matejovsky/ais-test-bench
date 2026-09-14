@@ -101,10 +101,12 @@ tasks:
 # ---- release ----
 
   release:
-    desc: Tag and push a release (VERSION=1.2.3 or v1.2.3). Go module release via git tag only, no artifacts.
+    desc: 'Tag and push a release (task release -- 1.2.3, or VERSION=1.2.3). Go module release via git tag only, no artifacts.'
     silent: true
+    vars:
+      RELEASE_VERSION: '{{.VERSION}}{{.CLI_ARGS}}'
     cmds:
-      - pwsh -NoProfile -NonInteractive -File taskfile/release.ps1 -Version "{{.VERSION}}"
+      - pwsh -NoProfile -NonInteractive -File taskfile/release.ps1 -Version "{{.RELEASE_VERSION}}"
 
 # ---- maintenance tasks ----
 
