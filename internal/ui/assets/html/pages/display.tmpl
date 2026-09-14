@@ -1,0 +1,20 @@
+{{define "page:title"}}Display{{end}}
+
+{{define "page:head"}}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script defer src="/static/js/display.js"></script>
+{{end}}
+
+{{define "page:content"}}
+<h1>Display</h1>
+<p>Synthetic vessel traffic off Rotterdam. Positions refresh every second.</p>
+<div class="toolbar">
+    <p id="live-status" role="status">Connecting...</p>
+    <button id="fit-vessels" type="button">Show all vessels</button>
+</div>
+<p id="tile-status" role="status"></p>
+<div id="map" aria-label="Live vessel map"></div>
+<p>Click a vessel for its MMSI, speed, course, and latest position.</p>
+<noscript>Enable JavaScript to view the live map.</noscript>
+{{end}}

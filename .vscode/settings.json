@@ -61,10 +61,28 @@
     ]
   },
   "cSpell.words": [
+    "adrianmo",
+    "AIVDM",
+    "checksummed",
+    "deadcode",
+    "fe3dback",
+    "frontends",
+    "golangci",
+    "gopls",
+    "gotest",
     "gotestsum",
+    "govulncheck",
+    "healthz",
+    "HTMX",
     "LASTEXITCODE",
     "matejovsky",
     "miroslav",
-    "pkgname"
+    "mmsi",
+    "NMEA",
+    "overcomplicate",
+    "pkgname",
+    "RAIM",
+    "stretchr",
+    "taskfile"
   ]
 }
