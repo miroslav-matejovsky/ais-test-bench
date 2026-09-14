@@ -98,7 +98,7 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 	ctx, cancel := context.WithTimeout(ctx, upstreamTimeout)
 	defer cancel()
 
-	var metadata simulatorapi.Metadata
+	var metadata upstreamMetadata
 	metadataDone := make(chan error, 1)
 	go func() {
 		metadataDone <- c.get(ctx, "/api/metadata", &metadata)

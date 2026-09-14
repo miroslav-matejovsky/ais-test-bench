@@ -1,11 +1,13 @@
 /* global L */
 (() => {
     const status = document.getElementById("live-status");
+    const clock = document.getElementById("sim-clock");
+    const mapElement = document.getElementById("map");
     if (!window.L) {
         status.textContent = "Map library could not load. Check your internet connection and reload.";
         return;
     }
-    const map = L.map("map").setView([52.02, 3.97], 11);
+    const map = L.map(mapElement).setView([52.02, 3.97], 11);
     const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -17,7 +19,21 @@
     const markers = new Map();
     let simulationId = null;
     let framed = false;
-    let lastUpdate = null;
+    let lastUpdate = null; // Real receipt time of the last successful response.
+    let lastTime = null; // Virtual clock of the last successful response.
+
+    // Simulation times are virtual UTC instants. They are shown as UTC text from
+    // the server value, never converted to local time or extrapolated.
+    function formatUTC(iso) {
+        return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
+    }
+
+    function showClock(time, stale) {
+        const speed = time.paused ? "paused" : `${time.speed}x`;
+        clock.textContent = `Simulation time: ${formatUTC(time.now)} | Speed: ${speed}${stale ? " | stale" : ""}`;
+        clock.classList.toggle("stale", stale);
+        mapElement.classList.toggle("stale", stale);
+    }
 
     function fitVessels() {
         if (markers.size) {
@@ -49,7 +65,7 @@
             `Course: ${format(vessel.course, "deg", 1)}`,
             `Heading: ${format(vessel.heading, "deg")}`,
             `Position: ${vessel.latitude.toFixed(6)}, ${vessel.longitude.toFixed(6)}`,
-            `Updated: ${new Date(vessel.updatedAt).toLocaleTimeString()}`,
+            `Reported: ${formatUTC(vessel.updatedAt)}`,
         ].join("\n");
         return element;
     }
@@ -100,21 +116,26 @@
             }
             framed = true;
         }
+        showClock(fleet.time, false);
         const noFix = withoutFix ? `, ${withoutFix} without position fix` : "";
-        status.textContent = `Live: ${fleet.vessels.length} vessel(s)${noFix} | Updated ${new Date(fleet.updatedAt).toLocaleTimeString()}`;
+        status.textContent = `Live: ${fleet.vessels.length} vessel(s)${noFix} | Received ${lastUpdate.toLocaleTimeString()}`;
     }
 
-    // One request at a time; the next poll starts one second after completion.
-    // The timeout exceeds the backend's five-second simulator deadline.
+    // One request at a time; the next poll starts one real second after
+    // completion, also while the simulation is paused. The timeout exceeds the
+    // backend's five-second simulator deadline.
     async function refresh() {
         try {
             const response = await fetch("/display/api/vessels", { cache: "no-store", signal: AbortSignal.timeout(7000) });
             if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
-            apply(await response.json());
+            const fleet = await response.json();
             lastUpdate = new Date();
+            lastTime = fleet.time;
+            apply(fleet);
         } catch (error) {
-            const last = lastUpdate ? `Showing data from ${lastUpdate.toLocaleTimeString()}.` : "No vessel data yet.";
+            const last = lastUpdate ? `Showing data received at ${lastUpdate.toLocaleTimeString()}.` : "No vessel data yet.";
             status.textContent = `Updates unavailable (${error.message}). ${last} Retrying...`;
+            if (lastTime) showClock(lastTime, true);
         } finally {
             window.setTimeout(refresh, 1000);
         }

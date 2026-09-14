@@ -3,8 +3,9 @@
 A local AIS simulator with a live vessel map and a manager UI. One random vessel
 starts automatically in the North Sea off Rotterdam. The manager can set the fleet
 to 0-100 vessels. Each vessel has a stable synthetic MMSI, a name, a vessel type,
-and a random speed and course. Positions advance once per second at the reported
-speed.
+and a random speed and course. Every vessel reports once per second of simulation
+time. The manager sets how fast simulation time passes, from 0.01x to 100x, or
+pauses it; vessels keep their reported speed in knots.
 
 ## Run
 
@@ -14,9 +15,11 @@ The combined command runs both components in one process:
 task run
 ```
 
-Open [Manager](http://localhost:8000/manager) to adjust the vessel count and inspect
-recent messages. Open [Display](http://localhost:8000/display) for the live map.
-Both pages see the same simulation, including changes made in other browser tabs.
+Open [Manager](http://localhost:8000/manager) to adjust the vessel count and
+simulation speed and to inspect recent messages. Open
+[Display](http://localhost:8000/display) for the live map. Both pages see the same
+simulation, including changes made in other browser tabs. Both show the virtual
+UTC simulation time and speed separately from when the page last received data.
 
 The components also run as separate processes. Use two terminals:
 
@@ -62,20 +65,24 @@ the display backend reads the simulator server-side.
 ```mermaid
 flowchart LR
     Manager[Manager browser] --> Simulator[Simulator API and manager]
-    External[External clients] --> Simulator
-    Simulator --> Engine[Simulation engine and history]
+    External[External HTTP clients] --> Simulator
+    Simulator --> Driver[Real-time driver]
+    Driver --> Engine[Public simulation engine]
+    GoPrograms[Other Go programs] --> Engine
     DisplayBrowser[Display browser] --> Display[Display backend]
     Display -- HTTP /api/vessels and /api/metadata --> Simulator
 ```
 
-In combined mode, `internal/app` creates one engine and mounts its API on the
-public listener and on a private `127.0.0.1` listener with an OS-assigned port.
-The display client reads that private listener, so the display consumes NMEA over
+Both applications and other Go programs use the same engine implementation. In
+the applications, the real-time driver is its only mutator. In combined mode,
+`internal/app` creates one engine and driver and mounts the API on the public
+listener and on a private `127.0.0.1` listener with an OS-assigned port. The
+display client reads that private listener, so the display consumes NMEA over
 HTTP in both modes and never reads engine state.
 
 | Package | Responsibility |
 | --- | --- |
-| `simulation` | Public engine: random fleet, movement, AIS encoding, latest reports, recent message history, metadata |
+| `simulation` | Public engine: random fleet, movement, AIS encoding, virtual clock and speed, complete report batches, bounded history, metadata |
 | `internal/app` | Combined composition: one engine, public and private API listeners, display, shutdown order |
 | `internal/simulator` | Simulator HTTP API with engine-to-wire conversion, standalone manager routes, engine and HTTP lifecycle |
 | `internal/simulation` | Real-time driver: run configuration, measured elapsed-time pacing, serialized count and speed commands |
@@ -86,24 +93,21 @@ HTTP in both modes and never reads engine state.
 | `internal/httpserver` | Shared HTTP server settings and bounded shutdown |
 | `internal/cli` | Shared listen address validation |
 
-Other Go programs can import the engine directly as
-`github.com/miroslav-matejovsky/ais-test-bench/simulation` to generate the same
-traffic without a server. It runs on a virtual clock from a caller-supplied start
-instant, seed, and fleet size. Callers step virtual time explicitly or pass
-elapsed real time at a speed from 0.01x to 100x; 0 pauses. Each call returns
-every report it emits, and the same ordered calls reproduce the same sentences.
-It never reads the wall clock and returns detached copies of its fleet, history,
-and metadata. See its package documentation and example.
-
 The simulator creates a report immediately for every new vessel and at every
 one-second virtual tick. Reports contain MMSI, position, speed, course, heading,
 and UTC seconds, framed as checksummed `!AIVDM` sentences with CRLF. The small
 codec uses [go-nmea](https://github.com/adrianmo/go-nmea) to validate each sentence.
 The application starts virtual time at the real startup instant and delivers
-measured wall-clock time every 100 ms at the current speed, 1x by default, so
-report timestamps follow real time until the speed changes. A backlog of more
-than one virtual hour, for example after the host was suspended, stops the
-simulator instead of replaying it.
+measured wall-clock time every 100 ms of real time at the current speed, 1x by
+default, so report timestamps follow real time until the speed changes. A count
+or speed change first settles elapsed time at the previous speed. A backlog of
+more than one virtual hour, for example after the host was suspended, stops the
+simulator instead of replaying it. At 100x that is 36 real seconds. HTTP
+deadlines, shutdown, and page polling always use real time.
+
+At 100 vessels and 100x the simulator emits 10,000 reports per real second, so
+the 1,000 retained reports cover about 0.1 real seconds. HTTP clients detect
+missed reports from sequence gaps; Go programs receive complete batches.
 
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
 removes active vessels while preserving retained reports. Setting the count to
@@ -114,6 +118,65 @@ The original domain/application contract subpackages and the targets, networking
 management, and visualization folders remain as design scaffolding. The running
 scenario uses the concrete packages above. TCP/UDP publishing, playback,
 additional message types, and route planning are future design work.
+
+## Go package
+
+Other Go programs import the engine to generate the same traffic without a
+server, network, or UI:
+
+```go
+import "github.com/miroslav-matejovsky/ais-test-bench/simulation"
+
+sim, err := simulation.New(simulation.Config{
+    ID:                 "test-run",
+    StartTime:          time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+    Seed:               42,
+    InitialVesselCount: 2,
+    Speed:              1,
+})
+if err != nil {
+    return err
+}
+initial := sim.History().Messages                // 2 creation reports at StartTime
+reports, err := sim.Advance(ctx, 5*time.Second) // 10 reports at 03:04:06-03:04:10
+if err != nil {
+    return err
+}
+for _, report := range reports {
+    decode(report.Sentence) // "!AIVDM,1,1,,A,...*hh\r\n"
+}
+```
+
+- **Config:** every field is explicit; seed, count, and speed 0 are valid values,
+  not defaults. The ID must be nonempty. `StartTime` must be nonzero and within
+  years 1-9999 and is normalized to UTC. Count is 0-100.
+- **Messages:** `SetCount` returns the creation reports; `Advance` and `Elapse`
+  return every report they emit, in sequence order, as `Message{Sequence, MMSI,
+  Timestamp, Sentence}`. Sentences are checksummed type 1 `!AIVDM` lines with
+  CRLF whose UTC second comes from the full virtual `Timestamp`.
+- **Time:** `Advance(ctx, d)` adds exactly `d` of virtual time. `Elapse(ctx, d)`
+  adds real `d` multiplied by the speed, carrying sub-nanosecond remainders, so
+  split calls equal one combined call. Reports fall on every virtual second after
+  `StartTime`. One call covers at most 60 virtual seconds (6,000 reports at 100
+  vessels); split longer periods.
+- **Speed:** 0 pauses `Elapse` and drops the real time, with no catch-up after
+  resuming. Otherwise speed is 0.01-100 in 0.01 steps. `Advance` still works while
+  paused. Speed never changes the knots vessels report.
+- **History:** `History` keeps only the latest 1,000 reports. Returned batches are
+  complete; a gap between the last sequence you processed and
+  `History().OldestSequence` means reports were lost from history.
+- **Atomicity:** a failed call returns no reports and changes nothing, including
+  random state, clock, and remainder. A context is checked before and between
+  ticks. Errors wrap `ErrInvalid` for rejected input and `ErrLimit` for exceeded
+  limits.
+- **Caller responsibility:** the package reads no clock, sleeps, or starts
+  goroutines. Callers pace real time, for example by passing measured durations
+  to `Elapse` as the test bench does every 100 ms, and order their commands. The
+  same config and ordered calls reproduce the same bytes; methods are safe for
+  concurrent use, but concurrent callers get no deterministic order.
+
+The runnable examples cover initial creation, batches, stepping, speed scaling,
+and pause: `go doc -all ./simulation`.
 
 ## Simulator API
 
@@ -157,17 +220,20 @@ array.
 ## Display API
 
 `GET /display/api/vessels` returns `{ "simulationId": "...", "updatedAt": "...",
+"time": { "now": "...", "elapsedMs": 1400, "speed": 1, "paused": false },
 "spawnBounds": { "south": 52, "north": 52.04, "west": 3.94, "east": 4 },
-"vessels": [...] }`. A vessel has `mmsi`, `name`, `typeId`, `typeName`,
-`latitude`, `longitude`, `speed` (knots), `course` and `heading` (degrees), and
-`updatedAt` (UTC report time). Navigation values are decoded from the latest NMEA
+"vessels": [...] }`. `time` is the validated simulator metadata clock. A vessel
+has `mmsi`, `name`, `typeId`, `typeName`, `latitude`, `longitude`, `speed`
+(knots), `course` and `heading` (degrees), and `updatedAt` (virtual UTC report
+time). Navigation values are decoded from the latest NMEA
 report and are `null` when AIS marks them unavailable.
 
 Each request reads the simulator fleet and metadata concurrently with a
 five-second deadline. An unreachable simulator, a timeout, or a restart between
-the two reads returns 503. Invalid simulator JSON, metadata, or AIS returns 502.
-The page then keeps its last markers, shows that updates are unavailable, and
-retries. A new `simulationId` clears the map before the new fleet is drawn.
+the two reads returns 503. Invalid simulator JSON, metadata, time, or AIS returns
+502. The page then keeps its last markers and clock, marks them stale, shows that
+updates are unavailable, and retries. A new `simulationId` clears the map before
+the new fleet is drawn.
 
 Movement follows the current speed and course over the earth's surface. Random
 starting positions are offshore; this first scenario has no coastline avoidance.

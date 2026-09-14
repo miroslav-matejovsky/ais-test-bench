@@ -5,7 +5,7 @@
 // Client.Fleet reads /api/vessels and /api/metadata concurrently under one
 // five-second deadline derived from the request context, bounds each body to
 // 2 MiB, and waits for both reads before returning. It keeps no background
-// poller, cache, or history.
+// poller, cache, clock, or history.
 //
 // The projection validates both responses before producing anything: matching
 // simulation identities, required metadata, unique MMSIs, and every report
@@ -14,20 +14,30 @@
 // are null when AIS marks them unavailable. Names and type IDs come from the
 // fleet, type names from metadata, and full report times from the envelope.
 //
+// Metadata time is decoded presence-aware, so a missing or null field differs
+// from a valid zero. The projection requires now, elapsedMs, speed, and paused;
+// now must not be before startedAt, elapsedMs must not be negative, speed must
+// be 0 or within settings.speed limits on a step, and paused must be true
+// exactly at speed 0. The validated clock is forwarded unchanged as time. The
+// two reads are separate snapshots of one run, so a report newer than time.now
+// is valid.
+//
 // NewAPI serves the projection at GET /display/api/vessels. A connection
 // failure, timeout, or simulator restart between the two reads returns 503; an
-// invalid simulator response returns 502. A failed request never returns a
-// partial or empty fleet, so the browser keeps its last known markers.
+// invalid simulator response, including invalid time metadata, returns 502. A
+// failed request never returns a partial or empty fleet, so the browser keeps
+// its last known markers and clock.
 //
 // # Examples
 //
-// Captured from a standalone display reading a simulator with two vessels.
-// Coordinates are the decoded AIS values, in 1/600000 degree steps:
+// A standalone display reading a simulator with two vessels. Times are virtual
+// UTC instants; coordinates are the decoded AIS values, in 1/600000 degree steps:
 //
 //	curl http://localhost:8081/display/api/vessels
 //	{
 //	  "simulationId": "IJENAMFPYI57PPVSEAOORYM4Z6",
 //	  "updatedAt": "2026-09-14T04:42:09.9398422Z",
+//	  "time": {"now": "2026-09-14T04:42:10.0590619Z", "elapsedMs": 1400, "speed": 1, "paused": false},
 //	  "spawnBounds": {"south": 52, "north": 52.04, "west": 3.94, "east": 4},
 //	  "vessels": [
 //	    {
@@ -40,7 +50,7 @@
 //	      "speed": 7.3,
 //	      "course": 321,
 //	      "heading": 321,
-//	      "updatedAt": "2026-09-14T04:42:09.6601754Z"
+//	      "updatedAt": "2026-09-14T04:42:09.6590619Z"
 //	    },
 //	    {
 //	      "mmsi": 200000001,

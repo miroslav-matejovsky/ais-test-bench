@@ -11,8 +11,11 @@ import (
 type Fleet struct {
 	// SimulationID identifies the simulator run; a change means a restart.
 	SimulationID string `json:"simulationId"`
-	// UpdatedAt is the simulator fleet update time.
+	// UpdatedAt is the virtual simulator fleet update time.
 	UpdatedAt time.Time `json:"updatedAt"`
+	// Time is the simulator's validated virtual clock from metadata. It is read
+	// separately from the fleet, so a report can be slightly newer than Time.Now.
+	Time simulatorapi.TimeState `json:"time"`
 	// SpawnBounds is the simulator area where vessels start, for map framing.
 	SpawnBounds simulatorapi.SpawnBounds `json:"spawnBounds"`
 	// Vessels is the complete active set in simulator order; [] when empty.
@@ -32,6 +35,6 @@ type Vessel struct {
 	Speed     *float64 `json:"speed"`
 	Course    *float64 `json:"course"`
 	Heading   *int     `json:"heading"`
-	// UpdatedAt is the full report generation time from the report envelope.
+	// UpdatedAt is the full virtual report generation time from the envelope.
 	UpdatedAt time.Time `json:"updatedAt"`
 }

@@ -3,5 +3,17 @@
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
 
+- manually verify Manager and Display time and speed controls in a browser; there is no browser automation harness:
+  - apply 0.5x, 2x, and 0 (pause), then resume; clock and speed text follow each change
+  - unsaved count and speed edits, and a focused field, survive polls
+  - a failed write (stop the simulator, then Apply) shows the error and keeps the draft
+  - a slow poll that completes after a successful write does not revert the confirmed value
+  - two tabs: speed applied in one appears in the other within the next poll
+  - restart the simulator during a refresh; fleet, history, and metadata of different runs are never shown together (B3)
+  - reconnect after the simulator stops and starts again; forms reset for the new run
+  - full UTC date and time across midnight with a custom start date
+  - a paused clock stays connected, while an upstream failure marks clock and map stale
+  - run the checks in combined mode and in separate simulator and display processes
+- after the manual browser checks above pass and the work is accepted, remove docs/plans/shared-simulation-virtual-time and its row in docs/plans/README.md
 - support to simulate multiple AIS base stations
 - support to simulate failures of AIS base stations
