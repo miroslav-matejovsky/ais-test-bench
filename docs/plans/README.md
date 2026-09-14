@@ -24,3 +24,4 @@ Each plan contains assessment.md that contains the assessment of the impact, fea
 
 | Plan | Backlog priority | Outcome |
 | --- | ---: | --- |
+| [Separate simulator and display](separate-simulator-display/README.md) | Unassigned | Independent simulator and display commands, an HTTP API boundary, and a combined launcher |
