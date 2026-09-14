@@ -46,7 +46,7 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	if err != nil {
 		return fail(fmt.Errorf("create simulation: %w", err))
 	}
-	sim := simdriver.NewDriver(engine)
+	sim := simdriver.NewDriver(engine, simdriver.SystemClock{})
 	client, err := display.NewClient("http://" + internalLn.Addr().String())
 	if err != nil {
 		return fail(fmt.Errorf("create display client: %w", err))

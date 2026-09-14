@@ -78,7 +78,7 @@ HTTP in both modes and never reads engine state.
 | `simulation` | Public engine: random fleet, movement, AIS encoding, latest reports, recent message history, metadata |
 | `internal/app` | Combined composition: one engine, public and private API listeners, display, shutdown order |
 | `internal/simulator` | Simulator HTTP API with engine-to-wire conversion, standalone manager routes, engine and HTTP lifecycle |
-| `internal/simulation` | Real-time driver: run identity, wall-clock ticks, delegation to the public engine |
+| `internal/simulation` | Real-time driver: run configuration, measured elapsed-time pacing, serialized count and speed commands |
 | `internal/simulatorapi` | JSON wire types and documented simulator API contract |
 | `internal/display` | Simulator HTTP client, NMEA-derived projection, display API, standalone lifecycle |
 | `internal/ais` | Encode and decode AIS type 1 position reports; validate NMEA with go-nmea |
@@ -99,8 +99,11 @@ The simulator creates a report immediately for every new vessel and at every
 one-second virtual tick. Reports contain MMSI, position, speed, course, heading,
 and UTC seconds, framed as checksummed `!AIVDM` sentences with CRLF. The small
 codec uses [go-nmea](https://github.com/adrianmo/go-nmea) to validate each sentence.
-The application starts virtual time at the real startup instant and drives it at
-1x from measured wall-clock time, so report timestamps follow real time.
+The application starts virtual time at the real startup instant and delivers
+measured wall-clock time every 100 ms at the current speed, 1x by default, so
+report timestamps follow real time until the speed changes. A backlog of more
+than one virtual hour, for example after the host was suspended, stops the
+simulator instead of replaying it.
 
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
 removes active vessels while preserving retained reports. Setting the count to
@@ -121,13 +124,22 @@ Any HTTP client can poll the simulator. JSON responses use `Cache-Control: no-st
 | GET | `/api/vessels` | `{ "simulationId": "...", "updatedAt": "...", "messageCount": 1, "messageLimit": 1000, "vessels": [...] }` |
 | PUT | `/api/vessels` | Accepts `{ "count": 3 }`; returns the resulting fleet |
 | GET | `/api/messages` | `{ "simulationId": "...", "messageLimit": 1000, "oldestSequence": 1, "latestSequence": 1, "messages": [...] }` |
-| GET | `/api/metadata` | Run identity and start, vessel type catalog, supported AIS message types, effective settings |
+| GET | `/api/metadata` | Run identity, virtual start and `time`, vessel type catalog, supported AIS message types, effective settings |
+| PUT | `/api/time` | Accepts `{ "speed": 2 }`; returns the resulting metadata |
 
 ```text
 curl http://localhost:8000/api/metadata
 curl http://localhost:8000/api/vessels
 curl -X PUT -H "Content-Type: application/json" -d '{"count":3}' http://localhost:8000/api/vessels
+curl -X PUT -H "Content-Type: application/json" -d '{"speed":0}' http://localhost:8000/api/time
 ```
+
+All simulation timestamps are virtual UTC instants starting at `startedAt`.
+Metadata `time` is the committed virtual clock: `{ "now": "...", "elapsedMs":
+5000, "speed": 1, "paused": false }`. Speed changes how fast virtual time passes,
+not the knots vessels report. A count or speed change first settles elapsed time
+at the previous speed. Each response is a separate snapshot, so a report can be
+slightly newer than a `time.now` read earlier.
 
 A fleet vessel is `{ "mmsi": ..., "name": "...", "typeId": "cargo", "report": {
 "sequence": 1, "timestamp": "...", "sentence": "!AIVDM,...\r\n" } }`. Navigation
@@ -136,9 +148,11 @@ data is only in the NMEA sentence. A history message is `{ "sequence": 1,
 empty history. Sequences restart with every new `simulationId`. See
 `internal/simulatorapi` for the full contract and polling guidance.
 
-`PUT` requires `Content-Type: application/json` and an integer count from 0 to 100.
-Malformed input returns 400; other content types return 415; other methods
-return 405. An empty fleet is an empty JSON array.
+`PUT` requires `Content-Type: application/json` and either an integer count from
+0 to 100 or a speed of 0 (pause) or 0.01 to 100 in 0.01 steps. Malformed input
+returns 400; other content types return 415; other methods return 405; a valid
+change the simulator cannot apply returns 500. An empty fleet is an empty JSON
+array.
 
 ## Display API
 

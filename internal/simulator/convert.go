@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
@@ -37,15 +38,20 @@ func historyResponse(history simulation.History) simulatorapi.History {
 	}
 }
 
+// metadataResponse adds the driver's real pacing interval, which the engine does
+// not know, and truncates elapsed virtual time to milliseconds.
 func metadataResponse(metadata simulation.Metadata) simulatorapi.Metadata {
 	types := make([]simulatorapi.VesselType, 0, len(metadata.VesselTypes))
 	for _, vesselType := range metadata.VesselTypes {
 		types = append(types, simulatorapi.VesselType(vesselType))
 	}
-	settings := metadata.Settings
+	clock, settings := metadata.Time, metadata.Settings
 	return simulatorapi.Metadata{
-		SimulationID:          metadata.SimulationID,
-		StartedAt:             metadata.StartedAt,
+		SimulationID: metadata.SimulationID,
+		StartedAt:    metadata.StartedAt,
+		Time: simulatorapi.TimeState{
+			Now: clock.Now, ElapsedMs: clock.Elapsed.Milliseconds(), Speed: clock.Speed, Paused: clock.Paused,
+		},
 		VesselTypes:           types,
 		SupportedMessageTypes: append([]int{}, metadata.SupportedMessageTypes...),
 		Settings: simulatorapi.Settings{
@@ -53,8 +59,10 @@ func metadataResponse(metadata simulation.Metadata) simulatorapi.Metadata {
 			MaxVessels:          settings.MaxVessels,
 			TickIntervalMs:      settings.TickIntervalMs,
 			MessageIntervalMs:   settings.MessageIntervalMs,
+			PacingIntervalMs:    simdriver.Heartbeat.Milliseconds(),
 			MessageHistoryLimit: settings.MessageHistoryLimit,
 			SpeedKnots:          simulatorapi.SpeedRange(settings.SpeedKnots),
+			Speed:               simulatorapi.SpeedLimits(settings.Speed),
 			SpawnBounds:         simulatorapi.SpawnBounds(settings.SpawnBounds),
 		},
 	}

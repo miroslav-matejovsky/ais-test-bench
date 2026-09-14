@@ -49,20 +49,26 @@ func TestHistoryJSON(t *testing.T) {
 }
 
 func TestMetadataJSON(t *testing.T) {
+	startedAt := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
 	metadata := simulatorapi.Metadata{
-		SimulationID:          "opaque-run-identity",
-		StartedAt:             time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC),
+		SimulationID: "opaque-run-identity",
+		StartedAt:    startedAt,
+		Time: simulatorapi.TimeState{
+			Now: startedAt.Add(5*time.Second + 999), ElapsedMs: 5000, Speed: 0, Paused: true,
+		},
 		VesselTypes:           []simulatorapi.VesselType{{ID: "cargo", Name: "Cargo vessel"}},
 		SupportedMessageTypes: []int{1},
 		Settings: simulatorapi.Settings{
-			InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, MessageHistoryLimit: 1000,
+			InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, PacingIntervalMs: 100, MessageHistoryLimit: 1000,
 			SpeedKnots:  simulatorapi.SpeedRange{Min: 6, Max: 15.9},
+			Speed:       simulatorapi.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
 			SpawnBounds: simulatorapi.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
 		},
 	}
 	requireRoundTrip(t, metadata, `{
 		"simulationId": "opaque-run-identity",
 		"startedAt": "2026-09-14T12:00:00Z",
+		"time": { "now": "2026-09-14T12:00:05.000000999Z", "elapsedMs": 5000, "speed": 0, "paused": true },
 		"vesselTypes": [{ "id": "cargo", "name": "Cargo vessel" }],
 		"supportedMessageTypes": [1],
 		"settings": {
@@ -70,8 +76,10 @@ func TestMetadataJSON(t *testing.T) {
 			"maxVessels": 100,
 			"tickIntervalMs": 1000,
 			"messageIntervalMs": 1000,
+			"pacingIntervalMs": 100,
 			"messageHistoryLimit": 1000,
 			"speedKnots": { "min": 6, "max": 15.9 },
+			"speed": { "min": 0.01, "max": 100, "step": 0.01 },
 			"spawnBounds": { "south": 52, "north": 52.04, "west": 3.94, "east": 4 }
 		}
 	}`)
@@ -86,6 +94,17 @@ func TestCountRequestJSON(t *testing.T) {
 	request = simulatorapi.CountRequest{}
 	require.NoError(t, json.Unmarshal([]byte(`{"count":null}`), &request))
 	require.Nil(t, request.Count)
+}
+
+func TestTimeRequestJSON(t *testing.T) {
+	var request simulatorapi.TimeRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"speed":0}`), &request))
+	require.NotNil(t, request.Speed, "0 is a valid pause speed")
+	require.InDelta(t, 0.0, *request.Speed, 0)
+
+	request = simulatorapi.TimeRequest{}
+	require.NoError(t, json.Unmarshal([]byte(`{"speed":null}`), &request))
+	require.Nil(t, request.Speed)
 }
 
 // requireRoundTrip checks the exact field names and values in want, and that

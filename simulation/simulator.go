@@ -252,6 +252,13 @@ func (s *Simulator) SetSpeed(speed float64) error {
 	return nil
 }
 
+// ValidateSpeed returns the error SetSpeed and New return for speed, or nil when
+// they accept it. Errors wrap ErrInvalid.
+func ValidateSpeed(speed float64) error {
+	_, err := normalizeSpeed(speed)
+	return err
+}
+
 // advance moves the staged clock by delta, emits every due tick, and commits.
 // Called with the lock held.
 func (s *Simulator) advance(ctx context.Context, next state, delta time.Duration) ([]Message, error) {
@@ -421,6 +428,7 @@ func (s *Simulator) Metadata() Metadata {
 			MessageIntervalMs:   TickInterval.Milliseconds(),
 			MessageHistoryLimit: MessageLimit,
 			SpeedKnots:          SpeedRange{Min: minSpeedKnots, Max: minSpeedKnots + (speedSteps-1)/10.0},
+			Speed:               SpeedLimits{Min: MinSpeed, Max: MaxSpeed, Step: SpeedStep},
 			SpawnBounds: SpawnBounds{
 				South: spawnSouth, North: spawnSouth + spawnLatSpan,
 				West: spawnWest, East: spawnWest + spawnLonSpan,

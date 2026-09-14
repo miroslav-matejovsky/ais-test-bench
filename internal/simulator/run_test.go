@@ -63,11 +63,11 @@ func (l failingListener) Close() error              { close(l.closed); return ni
 func (l failingListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
 
 func TestServeFailureClosesListenerAndStopsEngine(t *testing.T) {
-	_, driver, handler := newHandler(t)
+	f := newFixture(t)
 	ln := failingListener{closed: make(chan struct{})}
 
-	// Serve returns only after the tick loop has exited.
-	err := simulator.Serve(t.Context(), slog.New(slog.DiscardHandler), ln, driver, handler)
+	// Serve returns only after the pacing loop has exited.
+	err := simulator.Serve(t.Context(), slog.New(slog.DiscardHandler), ln, f.driver, f.handler)
 
 	require.ErrorContains(t, err, "accept failed")
 	select {

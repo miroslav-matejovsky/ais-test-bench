@@ -3,8 +3,7 @@
 # Use the allowlist for four cases:
 #  - functions staged for future use that are not reachable yet (temporary);
 #  - public library API of the root simulation package that other Go programs
-#    call but the test bench executables do not (Advance: explicit virtual steps;
-#    SetSpeed: until the simulator exposes speed control);
+#    call but the test bench executables do not (Advance: explicit virtual steps);
 #  - unexported marker methods that seal an event interface. A seal exists to stop
 #    another package from implementing the interface; calling it would defeat the
 #    point, so it is unreachable by construction and always will be;
@@ -12,8 +11,7 @@
 #    the production code itself. It is unreachable from a cmd entry point by nature,
 #    and the alternative (dropping it) means dropping the assertion it enables.
 $allow = @(
-    'Simulator.Advance',
-    'Simulator.SetSpeed'
+    'Simulator.Advance'
 )
 
 $out = deadcode ./cmd/... 2>&1

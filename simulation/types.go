@@ -125,7 +125,16 @@ type Settings struct {
 	MessageIntervalMs   int64
 	MessageHistoryLimit int
 	SpeedKnots          SpeedRange
+	Speed               SpeedLimits
 	SpawnBounds         SpawnBounds
+}
+
+// SpeedLimits is the accepted running speed range and precision. Speed 0 is the
+// separate pause value.
+type SpeedLimits struct {
+	Min  float64
+	Max  float64
+	Step float64
 }
 
 // SpeedRange is an inclusive speed range in knots, in 0.1-knot increments.

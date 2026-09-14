@@ -21,7 +21,7 @@ func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulation: %w", err), ln.Close())
 	}
-	sim := simdriver.NewDriver(engine)
+	sim := simdriver.NewDriver(engine, simdriver.SystemClock{})
 	handler, err := NewHandler(logger, sim)
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulator handler: %w", err), ln.Close())
@@ -29,9 +29,9 @@ func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
 	return Serve(ctx, logger, ln, sim, handler)
 }
 
-// Serve runs the tick loop of sim and serves handler on ln. It stops when ctx
-// is cancelled, the tick loop fails, or serving fails. HTTP shuts down first,
-// within httpserver.ShutdownTimeout, then the tick loop is stopped and joined.
+// Serve runs the pacing loop of sim and serves handler on ln. It stops when ctx
+// is cancelled, the pacing loop fails, or serving fails. HTTP shuts down first,
+// within httpserver.ShutdownTimeout, then the pacing loop is stopped and joined.
 // Serve takes ownership of ln and closes it. It returns nil after a clean
 // shutdown.
 func Serve(ctx context.Context, logger *slog.Logger, ln net.Listener, sim *simdriver.Driver, handler http.Handler) error {

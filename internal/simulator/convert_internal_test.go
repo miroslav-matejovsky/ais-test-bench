@@ -45,6 +45,29 @@ func TestResponsesPreserveEngineValues(t *testing.T) {
 			{Sequence: 2, MMSI: 200000001, Timestamp: at.Add(time.Second), Sentence: sentence},
 		},
 	}, history)
+
+	metadata := metadataResponse(simulation.Metadata{
+		SimulationID: "run-1", StartedAt: at,
+		Time:        simulation.TimeState{Now: at.Add(2*time.Second - 1), Elapsed: 2*time.Second - 1, Speed: 0.5},
+		VesselTypes: []simulation.VesselType{{ID: "cargo", Name: "Cargo vessel"}}, SupportedMessageTypes: []int{1},
+		Settings: simulation.Settings{
+			InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, MessageHistoryLimit: 1000,
+			SpeedKnots:  simulation.SpeedRange{Min: 6, Max: 15.9},
+			Speed:       simulation.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
+			SpawnBounds: simulation.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
+		},
+	})
+	require.Equal(t, simulatorapi.Metadata{
+		SimulationID: "run-1", StartedAt: at,
+		Time:        simulatorapi.TimeState{Now: at.Add(2*time.Second - 1), ElapsedMs: 1999, Speed: 0.5},
+		VesselTypes: []simulatorapi.VesselType{{ID: "cargo", Name: "Cargo vessel"}}, SupportedMessageTypes: []int{1},
+		Settings: simulatorapi.Settings{
+			InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, PacingIntervalMs: 100, MessageHistoryLimit: 1000,
+			SpeedKnots:  simulatorapi.SpeedRange{Min: 6, Max: 15.9},
+			Speed:       simulatorapi.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
+			SpawnBounds: simulatorapi.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
+		},
+	}, metadata)
 }
 
 func TestEmptyResponsesEncodeArraysAndNullBounds(t *testing.T) {
@@ -54,7 +77,7 @@ func TestEmptyResponsesEncodeArraysAndNullBounds(t *testing.T) {
 	}{
 		{fleetResponse(simulation.Fleet{}), []string{`"vessels":[]`}},
 		{historyResponse(simulation.History{}), []string{`"oldestSequence":null`, `"latestSequence":null`, `"messages":[]`}},
-		{metadataResponse(simulation.Metadata{}), []string{`"vesselTypes":[]`, `"supportedMessageTypes":[]`}},
+		{metadataResponse(simulation.Metadata{}), []string{`"vesselTypes":[]`, `"supportedMessageTypes":[]`, `"speed":0,"paused":false`}},
 	} {
 		data, err := json.Marshal(tt.value)
 		require.NoError(t, err)

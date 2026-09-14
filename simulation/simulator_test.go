@@ -348,6 +348,7 @@ func TestSetSpeedRejectsInvalidValues(t *testing.T) {
 	before := observe(s)
 	for _, speed := range []float64{-0.01, math.NaN(), math.Inf(1), math.Inf(-1), 100.01, 0.001, 1e-12, 0.015} {
 		require.ErrorIs(t, s.SetSpeed(speed), simulation.ErrInvalid)
+		require.ErrorIs(t, simulation.ValidateSpeed(speed), simulation.ErrInvalid)
 	}
 	require.Equal(t, before, observe(s))
 }
@@ -685,6 +686,7 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 			InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, MessageHistoryLimit: 1000,
 			SpeedKnots:  simulation.SpeedRange{Min: 6, Max: 15.9},
 			SpawnBounds: simulation.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
+			Speed:       simulation.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
 		},
 	}, metadata)
 	require.Len(t, s.Fleet().Vessels, metadata.Settings.InitialVesselCount)
