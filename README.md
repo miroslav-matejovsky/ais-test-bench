@@ -52,7 +52,8 @@ task all
 ```
 
 Development checks use the Go version in `go.mod`, Task, PowerShell,
-golangci-lint, deadcode, and gotestsum. Dependencies are vendored.
+golangci-lint, deadcode, gotestsum, and go-arch-lint. `task go-tools` installs
+the Go tools. Dependencies are vendored.
 
 ## Architecture
 
@@ -80,18 +81,8 @@ listener and on a private `127.0.0.1` listener with an OS-assigned port. The
 display client reads that private listener, so the display consumes NMEA over
 HTTP in both modes and never reads engine state.
 
-| Package | Responsibility |
-| --- | --- |
-| `simulation` | Public engine: random fleet, movement, AIS encoding, virtual clock and speed, complete report batches, bounded history, metadata |
-| `internal/app` | Combined composition: one engine, public and private API listeners, display, shutdown order |
-| `internal/simulator` | Simulator HTTP API with engine-to-wire conversion, standalone manager routes, engine and HTTP lifecycle |
-| `internal/simulation` | Real-time driver: run configuration, measured elapsed-time pacing, serialized count and speed commands |
-| `internal/simulatorapi` | JSON wire types and documented simulator API contract |
-| `internal/display` | Simulator HTTP client, NMEA-derived projection, display API, standalone lifecycle |
-| `internal/ais` | Encode and decode AIS type 1 position reports; validate NMEA with go-nmea |
-| `internal/ui` | Stateless HTML pages with component-specific navigation, embedded assets |
-| `internal/httpserver` | Shared HTTP server settings and bounded shutdown |
-| `internal/cli` | Shared listen address validation |
+Packages, their responsibilities, and their allowed dependencies are defined in
+[`.go-arch-lint.yml`](.go-arch-lint.yml) and enforced by `task arch-lint`.
 
 The simulator creates a report immediately for every new vessel and at every
 one-second virtual tick. Reports contain MMSI, position, speed, course, heading,
@@ -116,7 +107,7 @@ starts a new simulation identity.
 
 The original domain/application contract subpackages and the targets, networking,
 management, and visualization folders remain as design scaffolding. The running
-scenario uses the concrete packages above. TCP/UDP publishing, playback,
+scenario uses the concrete packages. TCP/UDP publishing, playback,
 additional message types, and route planning are future design work.
 
 ## Go package

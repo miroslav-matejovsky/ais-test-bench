@@ -74,6 +74,7 @@
     "govulncheck",
     "healthz",
     "HTMX",
+    "httpserver",
     "LASTEXITCODE",
     "matejovsky",
     "mathrand",
