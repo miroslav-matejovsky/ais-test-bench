@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
 )
 
 type api struct {

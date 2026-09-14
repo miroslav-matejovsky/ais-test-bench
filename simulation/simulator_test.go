@@ -12,8 +12,8 @@ import (
 	nmea "github.com/adrianmo/go-nmea"
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ais"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 const runID = "run-1"

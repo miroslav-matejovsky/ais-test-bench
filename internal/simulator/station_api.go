@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 func (a *api) stations(w http.ResponseWriter, r *http.Request) {

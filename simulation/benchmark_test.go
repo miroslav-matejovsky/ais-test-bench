@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // Benchmarks measure the engine at MaxVessels. One Advance operation is one

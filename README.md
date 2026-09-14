@@ -41,7 +41,7 @@ unreachable simulator, retries, and replaces its map after a simulator restart.
 
 | Command | Flags and defaults | Routes |
 | --- | --- | --- |
-| `go run ./cmd/ais-test-bench` | `-addr localhost:8000` | `/`, `/manager`, `/display`, `/status`, `/api/*`, `/display/api/*` |
+| `go run ./cmd/ais-testbench` | `-addr localhost:8000` | `/`, `/manager`, `/display`, `/status`, `/api/*`, `/display/api/*` |
 | `go run ./cmd/simulator` | `-addr localhost:8000` | `/` (redirects to `/manager`), `/manager`, `/status`, `/api/*` |
 | `go run ./cmd/display` | `-addr localhost:8081`, `-simulator-url http://localhost:8000` | `/` (redirects to `/display`), `/display`, `/display/api/*` |
 
@@ -131,7 +131,7 @@ Other Go programs import the engine to generate the same traffic without a
 server, network, or UI:
 
 ```go
-import "github.com/miroslav-matejovsky/ais-test-bench/simulation"
+import "github.com/miroslav-matejovsky/ais-testbench/simulation"
 
 sim, err := simulation.New(simulation.Config{
     ID:                 "test-run",
@@ -169,7 +169,7 @@ for _, report := range reports {
 - **Reception model:** one deterministic link budget with a radio horizon gives
   each station channel a receive probability for the reference transmitter.
   Its fixed parameters are in `Metadata().Settings.Reception`; they are
-  test-bench choices, not calibrated predictions. Each station carries 90% and
+  testbench choices, not calibrated predictions. Each station carries 90% and
   50% coverage rings per channel from the same model.
   The application starts with three demonstration sites, documented in
   `internal/simdriver`.

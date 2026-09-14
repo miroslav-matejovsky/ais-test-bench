@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ais"
 )
 
 const (

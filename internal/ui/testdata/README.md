@@ -9,7 +9,7 @@ Start the default combined app with its three stations and at least one received
 target:
 
 ```powershell
-go run ./cmd/ais-test-bench -addr 127.0.0.1:18080
+go run ./cmd/ais-testbench -addr 127.0.0.1:18080
 ```
 
 In another PowerShell session, start headless Edge with a dedicated temporary

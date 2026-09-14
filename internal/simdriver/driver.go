@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 const (

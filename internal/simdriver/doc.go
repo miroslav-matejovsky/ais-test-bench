@@ -1,7 +1,7 @@
 // Package simdriver is the real-time driver of the application's simulation
 // engine. The engine itself, with fleet generation, movement, AIS encoding,
 // history, metadata, and the virtual clock, is the public package
-// github.com/miroslav-matejovsky/ais-test-bench/simulation.
+// github.com/miroslav-matejovsky/ais-testbench/simulation.
 //
 // NewConfig returns the application's engine configuration: a fresh random
 // identity and seed, the current real instant as virtual start, one vessel,

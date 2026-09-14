@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // receivers returns stations with distinct outcomes for vessels in the spawn

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ais"
 )
 
 // coordinateTolerance is one AIS coordinate unit, 1/600000 degree.

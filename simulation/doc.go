@@ -1,7 +1,7 @@
 // Package simulation is the AIS traffic engine of the test bench, importable by
 // other Go programs as
 //
-//	import "github.com/miroslav-matejovsky/ais-test-bench/simulation"
+//	import "github.com/miroslav-matejovsky/ais-testbench/simulation"
 //
 // It owns synthetic vessels, their latest AIS reports, a bounded in-memory AIS
 // history, receiving stations with their receptions and observed targets, and a
@@ -47,7 +47,7 @@
 // probability through fixed knots, multiplied by a horizon taper and by one
 // minus the channel drop probability. Disabled stations and channels have
 // probability 0. Metadata.Settings.Reception publishes every parameter. The
-// values are empirical test-bench choices, not calibrated predictions.
+// values are empirical testbench choices, not calibrated predictions.
 //
 // Sources for the reference terms, not for the empirical choices:
 //   - AIS 1 is 161.975 MHz and AIS 2 is 162.025 MHz:

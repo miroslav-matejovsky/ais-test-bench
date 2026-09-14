@@ -13,11 +13,11 @@ import (
 	nmea "github.com/adrianmo/go-nmea"
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ais"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulator"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // start is a custom past virtual start, half a second before a new year.

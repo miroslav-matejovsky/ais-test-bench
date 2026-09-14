@@ -150,7 +150,7 @@ type GeoPoint struct {
 }
 
 // ReceptionModel lists the fixed parameters and assumptions of the reception
-// model. Values are empirical test-bench choices, not calibrated predictions.
+// model. Values are empirical testbench choices, not calibrated predictions.
 type ReceptionModel struct {
 	// SiteLossDB is excess loss in dB on every path.
 	SiteLossDB float64

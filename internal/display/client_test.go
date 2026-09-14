@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/display"
 )
 
 func TestNewClientValidatesSimulatorURL(t *testing.T) {

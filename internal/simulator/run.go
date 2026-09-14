@@ -8,9 +8,9 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/httpserver"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // Run starts a new simulation run and serves the standalone simulator (see
