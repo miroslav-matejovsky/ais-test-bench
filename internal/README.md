@@ -1,8 +1,8 @@
 # Internal packages
 
 The simulator component uses the public root package `simulation` for the
-authoritative fleet, latest reports, in-memory messages, and metadata. Internal
-`simulation` is the real-time driver that paces that engine. `simulator` holds
+authoritative fleet, latest reports, in-memory messages, and metadata.
+`simdriver` is the real-time driver that paces that engine. `simulator` holds
 the HTTP API, engine-to-wire conversion, manager composition, and runtime.
 `simulatorapi` holds the simulator API wire types shared with its consumers.
 
@@ -15,8 +15,7 @@ stateless HTML pages and serves static assets, `httpserver` runs HTTP servers
 with bounded shutdown, and `cli` validates listen addresses. `app` composes both
 components for the combined executable.
 
-The domain/application subpackages and the targets, networking, management, and
-visualization folders hold the original design contracts. Runtime services use
-the concrete packages directly. Package documentation lives in `doc.go`.
+Package documentation lives in `doc.go`. Allowed package dependencies are
+defined in [`.go-arch-lint.yml`](../.go-arch-lint.yml).
 
 See the [project README](../README.md) for the running architecture and API.

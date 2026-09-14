@@ -1,4 +1,4 @@
-package simulation_test
+package simdriver_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 

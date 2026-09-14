@@ -105,10 +105,8 @@ removes active vessels while preserving retained reports. Setting the count to
 zero stops message generation. Restarting resets the fleet and all history and
 starts a new simulation identity.
 
-The original domain/application contract subpackages and the targets, networking,
-management, and visualization folders remain as design scaffolding. The running
-scenario uses the concrete packages. TCP/UDP publishing, playback,
-additional message types, and route planning are future design work.
+TCP/UDP publishing, playback, additional message types, and route planning are
+future design work.
 
 ## Go package
 

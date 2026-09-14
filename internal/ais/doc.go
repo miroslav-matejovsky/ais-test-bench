@@ -16,7 +16,4 @@
 //
 // The field layout follows the USCG type 1 documentation
 // (https://www.navcen.uscg.gov/ais-class-a-reports).
-//
-// The application, domain, and infrastructure subpackages retain the earlier
-// semantic report and publication contracts.
 package ais

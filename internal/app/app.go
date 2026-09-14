@@ -10,7 +10,7 @@ import (
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"

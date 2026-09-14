@@ -9,7 +9,7 @@ import (
 	"mime"
 	"net/http"
 
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )

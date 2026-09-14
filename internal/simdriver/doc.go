@@ -1,8 +1,7 @@
-// Package simulation is the real-time driver of the application's simulation
+// Package simdriver is the real-time driver of the application's simulation
 // engine. The engine itself, with fleet generation, movement, AIS encoding,
 // history, metadata, and the virtual clock, is the public package
-// github.com/miroslav-matejovsky/ais-test-bench/simulation; callers importing
-// both conventionally name this package simdriver.
+// github.com/miroslav-matejovsky/ais-test-bench/simulation.
 //
 // NewConfig returns the application's engine configuration: a fresh random
 // identity and seed, the current real instant as virtual start, one vessel, and
@@ -33,7 +32,4 @@
 // Clock is the real-time seam and SystemClock the production clock. Real
 // instants keep their monotonic reading until elapsed time is computed; UTC
 // normalization applies only to virtual timestamps.
-//
-// The application, domain, and infrastructure subpackages hold earlier design
-// contracts for scenarios and playback.
-package simulation
+package simdriver

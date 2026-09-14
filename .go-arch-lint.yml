@@ -30,7 +30,7 @@ components:
   # Running application.
   app: { in: internal/app }                   # combined composition: one engine, public and private API listeners, display
   simulator: { in: internal/simulator }       # simulator HTTP API, manager routes, engine and HTTP lifecycle
-  simulation-driver: { in: internal/simulation } # real-time driver: pacing, serialized count and speed commands
+  simdriver: { in: internal/simdriver }       # real-time driver: pacing, serialized count and speed commands
   simulatorapi: { in: internal/simulatorapi } # JSON wire types and simulator API contract
   display: { in: internal/display }           # simulator HTTP client, NMEA projection, display API, lifecycle
   ais: { in: internal/ais }                   # AIS type 1 encode and decode, NMEA validation
@@ -38,20 +38,6 @@ components:
   ui-assets: { in: internal/ui/assets }       # embedded templates, CSS, JavaScript, and htmx
   httpserver: { in: internal/httpserver }     # shared HTTP server settings and bounded shutdown
   cli: { in: internal/cli }                   # shared listen address validation
-
-  # Design scaffolding, not used by the running application.
-  ais-domain: { in: internal/ais/domain }
-  ais-application: { in: internal/ais/application }
-  ais-infrastructure: { in: internal/ais/infrastructure }
-  simulation-domain: { in: internal/simulation/domain }
-  simulation-application: { in: internal/simulation/application }
-  simulation-infrastructure: { in: internal/simulation/infrastructure }
-  targets-domain: { in: internal/targets/domain }
-  targets-application: { in: internal/targets/application }
-  targets-infrastructure: { in: internal/targets/infrastructure }
-  management-service: { in: internal/management/service }
-  visualization-service: { in: internal/visualization/service }
-  networking: { in: internal/networking/** }
 
 deps:
   cmd-ais-test-bench:
@@ -65,10 +51,10 @@ deps:
     mayDependOn: [ais]
 
   app:
-    mayDependOn: [simulation, simulation-driver, simulator, display, ui, httpserver]
+    mayDependOn: [simulation, simdriver, simulator, display, ui, httpserver]
   simulator:
-    mayDependOn: [simulation, simulation-driver, simulatorapi, ui, httpserver]
-  simulation-driver:
+    mayDependOn: [simulation, simdriver, simulatorapi, ui, httpserver]
+  simdriver:
     mayDependOn: [simulation]
   display:
     mayDependOn: [ais, simulatorapi, ui, httpserver]
@@ -76,14 +62,3 @@ deps:
     mayDependOn: [ui-assets]
   ais:
     canUse: [go-nmea]
-
-  ais-application:
-    mayDependOn: [ais-domain]
-  simulation-application:
-    mayDependOn: [simulation-domain, targets-domain]
-  targets-application:
-    mayDependOn: [targets-domain]
-  management-service:
-    mayDependOn: [simulation-domain, targets-domain]
-  visualization-service:
-    mayDependOn: [targets-domain]
