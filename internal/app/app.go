@@ -23,7 +23,7 @@ const (
 // shutdownTimeout for in-flight requests. Run takes ownership of ln and closes
 // it. It returns nil after a clean shutdown.
 func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) (runErr error) {
-	simulator, err := simulation.New(time.Now(), rand.Uint64())
+	simulator, err := simulation.New(simulation.NewID(), time.Now(), rand.Uint64())
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulation: %w", err), ln.Close())
 	}

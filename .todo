@@ -2,3 +2,7 @@
 
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
+
+- Separate simulator and display: steps 03-07 of `docs/plans/separate-simulator-display` remain.
+  Step 03 must serve `Simulator.Fleet` and `Simulator.Metadata` and remove their `taskfile/deadcode.ps1` allowlist entries.
+  Step 04 defines the display endpoint types (`/display/api/vessels`) and its nullable-value contract tests.

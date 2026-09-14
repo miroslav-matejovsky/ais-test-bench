@@ -16,7 +16,7 @@ func (s *server) vessels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) messages(w http.ResponseWriter, r *http.Request) {
-	s.writeJSON(w, r, s.simulator.Messages())
+	s.writeJSON(w, r, s.simulator.History().Messages)
 }
 
 func (s *server) setVesselCount(w http.ResponseWriter, r *http.Request) {

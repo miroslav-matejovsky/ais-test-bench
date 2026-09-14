@@ -14,7 +14,7 @@ import (
 )
 
 func TestHandler(t *testing.T) {
-	simulator, err := simulation.New(time.Now(), 1)
+	simulator, err := simulation.New("run-1", time.Now(), 1)
 	require.NoError(t, err)
 	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler), simulator)
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestHandler(t *testing.T) {
 }
 
 func TestHandlerSetsVaryOnPages(t *testing.T) {
-	simulator, err := simulation.New(time.Now(), 1)
+	simulator, err := simulation.New("run-1", time.Now(), 1)
 	require.NoError(t, err)
 	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler), simulator)
 	require.NoError(t, err)

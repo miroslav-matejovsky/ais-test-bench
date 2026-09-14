@@ -9,6 +9,9 @@
 #    the production code itself. It is unreachable from a cmd entry point by nature,
 #    and the alternative (dropping it) means dropping the assertion it enables.
 $allow = @(
+    # Staged: served by the simulator HTTP API (plan separate-simulator-display, step 03).
+    'Simulator.Fleet'
+    'Simulator.Metadata'
 )
 
 $out = deadcode ./cmd/... 2>&1

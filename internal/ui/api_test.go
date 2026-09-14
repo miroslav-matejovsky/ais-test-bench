@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLiveAPI(t *testing.T) {
 	now := time.Now()
-	simulator, err := simulation.New(now, 1)
+	simulator, err := simulation.New("run-1", now, 1)
 	require.NoError(t, err)
 	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler), simulator)
 	require.NoError(t, err)
@@ -40,17 +41,18 @@ func TestLiveAPI(t *testing.T) {
 	require.NoError(t, json.Unmarshal(updated.Body.Bytes(), &live))
 	require.Len(t, live.Vessels, 3)
 	require.NotEqual(t, snapshot.Vessels[0].Latitude, live.Vessels[0].Latitude)
-	var messages []simulation.Message
+	var messages []simulatorapi.Message
 	require.NoError(t, json.Unmarshal(request(http.MethodGet, "/api/messages", "").Body.Bytes(), &messages))
 	require.Len(t, messages, 6)
 	require.Contains(t, messages[0].Sentence, "!AIVDM,")
+	require.Equal(t, uint64(6), messages[5].Sequence)
 	require.Equal(t, http.StatusOK, request(http.MethodPut, "/api/vessels", `{"count":0}`).Code)
 	require.Contains(t, request(http.MethodGet, "/api/vessels", "").Body.String(), `"vessels":[]`)
 	require.Equal(t, http.StatusMethodNotAllowed, request(http.MethodPost, "/api/vessels", `{"count":1}`).Code)
 }
 
 func TestCountAPIRejectsInvalidRequests(t *testing.T) {
-	simulator, err := simulation.New(time.Now(), 1)
+	simulator, err := simulation.New("run-1", time.Now(), 1)
 	require.NoError(t, err)
 	handler, err := ui.NewHandler(slog.New(slog.DiscardHandler), simulator)
 	require.NoError(t, err)

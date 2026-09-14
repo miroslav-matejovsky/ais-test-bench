@@ -35,7 +35,8 @@ One Go executable owns the simulation, in-memory state, HTTP API, and both UIs.
 | Package | Responsibility |
 | --- | --- |
 | `internal/app` | Start the simulator and HTTP server; stop both on cancellation |
-| `internal/simulation` | Random fleet, movement, synchronized snapshots, recent message history |
+| `internal/simulation` | Random fleet, movement, latest reports, recent message history, metadata |
+| `internal/simulatorapi` | JSON wire types and documented simulator API contract |
 | `internal/ais` | Encode AIS type 1 position reports; validate NMEA with go-nmea |
 | `internal/ui` | HTML pages, embedded assets, JSON API |
 
@@ -51,7 +52,7 @@ zero stops message generation. Restarting resets the fleet and all history.
 
 The original domain/application contract subpackages and the targets, networking,
 management, and visualization folders remain as design scaffolding. The running
-scenario uses the four concrete packages above. TCP/UDP publishing, playback,
+scenario uses the concrete packages above. TCP/UDP publishing, playback,
 additional message types, and route planning are future design work.
 
 ## HTTP API
@@ -62,7 +63,7 @@ Both UIs poll once per second. JSON responses use `Cache-Control: no-store`.
 | --- | --- | --- |
 | GET | `/api/vessels` | `{ "vessels": [...], "messageCount": 1, "messageLimit": 1000, "updatedAt": "..." }` |
 | PUT | `/api/vessels` | Accepts `{ "count": 3 }`; returns the updated vessel snapshot |
-| GET | `/api/messages` | Retained `{ "mmsi": ..., "timestamp": "...", "sentence": "!AIVDM,...\r\n" }` reports |
+| GET | `/api/messages` | Retained `{ "sequence": 1, "mmsi": ..., "timestamp": "...", "sentence": "!AIVDM,...\r\n" }` reports |
 
 `PUT` requires `Content-Type: application/json` and an integer count from 0 to 100.
 Malformed input returns 400; other content types return 415. A vessel includes
