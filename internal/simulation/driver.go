@@ -4,24 +4,33 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	mathrand "math/rand/v2"
 	"sync/atomic"
 	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
-// Driver paces one public simulation engine with wall-clock ticks and supplies
-// the current real time to fleet mutations. It holds no simulation state; all
-// generation, history, and metadata come from the engine.
+// elapseChunk bounds one Elapse call so its scaled duration stays within
+// simulation.MaxAdvance even at simulation.MaxSpeed.
+const elapseChunk = simulation.MaxAdvance / time.Duration(simulation.MaxSpeed)
+
+// Driver paces one public simulation engine with elapsed wall-clock time. It
+// holds no simulation state; all generation, history, and metadata come from the
+// engine.
 type Driver struct {
 	sim     *simulation.Simulator
 	started atomic.Bool
 }
 
-// NewID returns a random opaque simulation identity. Call it once per engine
-// start so runs using the same seed remain distinguishable.
-func NewID() string {
-	return rand.Text()
+// NewConfig returns the application's engine configuration: a fresh random
+// identity and seed, so runs are distinguishable, the current real instant as
+// the virtual start, one vessel, and real-time speed.
+func NewConfig() simulation.Config {
+	return simulation.Config{
+		ID: rand.Text(), StartTime: time.Now(), Seed: mathrand.Uint64(),
+		InitialVesselCount: 1, Speed: 1,
+	}
 }
 
 // NewDriver returns a driver for sim. The driver must be the only caller of
@@ -30,31 +39,44 @@ func NewDriver(sim *simulation.Simulator) *Driver {
 	return &Driver{sim: sim}
 }
 
-// Run advances the engine every simulation.TickInterval until cancellation or
-// an encoding error. It may be called once per driver; a second call returns an
-// error. The simplified reporting cadence is intended for live UI development.
+// Run wakes every simulation.TickInterval, measures the real time elapsed since
+// the previous wake, and passes all of it to the engine, so late or coalesced
+// wakes lose no virtual time. It stops on cancellation or an engine error. It
+// may be called once per driver; a second call returns an error.
 func (d *Driver) Run(ctx context.Context) error {
 	if !d.started.CompareAndSwap(false, true) {
 		return errors.New("simulation driver already started")
 	}
 	ticker := time.NewTicker(simulation.TickInterval)
 	defer ticker.Stop()
+	last := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case now := <-ticker.C:
-			if err := d.sim.Advance(now); err != nil {
-				return err
+		case <-ticker.C:
+			now := time.Now()
+			elapsed := now.Sub(last)
+			last = now
+			for elapsed > 0 {
+				chunk := min(elapsed, elapseChunk)
+				if _, err := d.sim.Elapse(ctx, chunk); err != nil {
+					if ctx.Err() != nil {
+						return nil
+					}
+					return err
+				}
+				elapsed -= chunk
 			}
 		}
 	}
 }
 
-// SetCount sets the active fleet size at the current real time. See
-// simulation.Simulator.SetCount.
+// SetCount sets the active fleet size at the engine's committed virtual time,
+// which trails real time by at most one tick. See simulation.Simulator.SetCount.
 func (d *Driver) SetCount(count int) error {
-	return d.sim.SetCount(count, time.Now())
+	_, err := d.sim.SetCount(count)
+	return err
 }
 
 // Fleet returns a copy of the active fleet.
@@ -67,7 +89,7 @@ func (d *Driver) History() simulation.History {
 	return d.sim.History()
 }
 
-// Metadata returns the run identity, catalogs, and effective settings.
+// Metadata returns the run identity, clock, catalogs, and effective settings.
 func (d *Driver) Metadata() simulation.Metadata {
 	return d.sim.Metadata()
 }

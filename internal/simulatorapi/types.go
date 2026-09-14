@@ -63,7 +63,8 @@ type Message struct {
 // Metadata describes one simulation run. It is immutable within a run.
 type Metadata struct {
 	SimulationID string `json:"simulationId"`
-	// StartedAt is the UTC engine start time.
+	// StartedAt is the initial virtual UTC instant. The applications start
+	// virtual time at the real startup instant.
 	StartedAt time.Time `json:"startedAt"`
 	// VesselTypes lists application categories, not numeric AIS ship types.
 	VesselTypes []VesselType `json:"vesselTypes"`

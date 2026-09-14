@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
 	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
@@ -19,7 +17,7 @@ import (
 // NewHandler) on ln until ctx is cancelled. Run takes ownership of ln and
 // closes it, also when construction fails.
 func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
-	engine, err := simulation.New(simdriver.NewID(), time.Now(), rand.Uint64())
+	engine, err := simulation.New(simdriver.NewConfig())
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulation: %w", err), ln.Close())
 	}

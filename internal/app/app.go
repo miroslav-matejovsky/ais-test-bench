@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
@@ -44,7 +42,7 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	fail := func(err error) error {
 		return errors.Join(err, ln.Close(), internalLn.Close())
 	}
-	engine, err := simulation.New(simdriver.NewID(), time.Now(), rand.Uint64())
+	engine, err := simulation.New(simdriver.NewConfig())
 	if err != nil {
 		return fail(fmt.Errorf("create simulation: %w", err))
 	}

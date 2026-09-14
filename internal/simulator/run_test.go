@@ -14,7 +14,6 @@ import (
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
 func get(t *testing.T, url string) []byte {
@@ -48,7 +47,7 @@ func TestRunServesManagerAndAPI(t *testing.T) {
 	require.NoError(t, json.Unmarshal(get(t, base+"/api/vessels"), &fleet))
 	require.NotEmpty(t, metadata.SimulationID)
 	require.Equal(t, metadata.SimulationID, fleet.SimulationID)
-	require.Len(t, fleet.Vessels, simulation.InitialVesselCount)
+	require.Len(t, fleet.Vessels, 1)
 
 	cancel()
 	require.NoError(t, <-done)

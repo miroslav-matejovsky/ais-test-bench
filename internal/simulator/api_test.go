@@ -21,7 +21,9 @@ import (
 // newHandler returns the engine, its driver, and the standalone handler.
 func newHandler(t *testing.T) (*simulation.Simulator, *simdriver.Driver, http.Handler) {
 	t.Helper()
-	sim, err := simulation.New("run-1", time.Now(), 1)
+	sim, err := simulation.New(simulation.Config{
+		ID: "run-1", StartTime: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC), Seed: 1, InitialVesselCount: 1, Speed: 1,
+	})
 	require.NoError(t, err)
 	driver := simdriver.NewDriver(sim)
 	handler, err := simulator.NewHandler(slog.New(slog.DiscardHandler), driver)
@@ -72,7 +74,8 @@ func TestCountChangesFleetAndHistory(t *testing.T) {
 
 	grown := decode[simulatorapi.Fleet](t, serve(handler, http.MethodPut, "/api/vessels", `{"count":3}`))
 	require.Len(t, grown.Vessels, 3)
-	require.NoError(t, sim.Advance(time.Now().Add(time.Hour)))
+	_, err := sim.Advance(t.Context(), time.Second)
+	require.NoError(t, err)
 
 	history := decode[simulatorapi.History](t, serve(handler, http.MethodGet, "/api/messages", ""))
 	require.Equal(t, "run-1", history.SimulationID)

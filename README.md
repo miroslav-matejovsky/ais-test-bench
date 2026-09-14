@@ -88,15 +88,19 @@ HTTP in both modes and never reads engine state.
 
 Other Go programs can import the engine directly as
 `github.com/miroslav-matejovsky/ais-test-bench/simulation` to generate the same
-traffic without a server. It uses only caller-supplied timestamps and seeds, and
-returns detached copies of its fleet, history, and metadata. See its package
-documentation and example.
+traffic without a server. It runs on a virtual clock from a caller-supplied start
+instant, seed, and fleet size. Callers step virtual time explicitly or pass
+elapsed real time at a speed from 0.01x to 100x; 0 pauses. Each call returns
+every report it emits, and the same ordered calls reproduce the same sentences.
+It never reads the wall clock and returns detached copies of its fleet, history,
+and metadata. See its package documentation and example.
 
-The simulator creates a report immediately for every new vessel and after each
-one-second movement tick. Reports contain MMSI, position, speed, course, heading,
+The simulator creates a report immediately for every new vessel and at every
+one-second virtual tick. Reports contain MMSI, position, speed, course, heading,
 and UTC seconds, framed as checksummed `!AIVDM` sentences with CRLF. The small
 codec uses [go-nmea](https://github.com/adrianmo/go-nmea) to validate each sentence.
-The simplified fixed cadence supports live development.
+The application starts virtual time at the real startup instant and drives it at
+1x from measured wall-clock time, so report timestamps follow real time.
 
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
 removes active vessels while preserving retained reports. Setting the count to
