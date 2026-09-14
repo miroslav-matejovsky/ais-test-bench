@@ -33,7 +33,7 @@ mode.
 6. Keep recent AIS messages and the raw-JSON history link. Display messages use
    the last ten history entries; do not decode reports just to show raw NMEA.
 7. Add `cmd/simulator/main.go`, `doc.go`, and focused CLI tests. Default `-addr`
-   to `localhost:8080`; require a valid explicit host and port. Start one engine,
+   to `localhost:8000`; require a valid explicit host and port. Start one engine,
    serve the manager/API, and stop on process cancellation.
 8. Serve `/` as a redirect to `/manager`. Keep `/status` useful for the simulator.
    Standalone navigation does not advertise a local display route.

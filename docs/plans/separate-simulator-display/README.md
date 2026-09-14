@@ -91,16 +91,16 @@ injection framework. Existing unused design contracts need no expansion.
 Proposed command examples below become valid after implementation.
 
 ```text
-go run ./cmd/simulator -addr localhost:8080
-go run ./cmd/display -addr localhost:8081 -simulator-url http://localhost:8080
-go run ./cmd/ais-test-bench -addr localhost:8080
+go run ./cmd/simulator -addr localhost:8000
+go run ./cmd/display -addr localhost:8081 -simulator-url http://localhost:8000
+go run ./cmd/ais-test-bench -addr localhost:8000
 ```
 
 | Mode | Public listener | Browser entry points | Simulator connection |
 | --- | --- | --- | --- |
-| Simulator | `localhost:8080` by default | `/` redirects to `/manager`; `/manager` | Own engine |
-| Display | `localhost:8081` by default | `/` redirects to `/display`; `/display` | `-simulator-url`, default `http://localhost:8080` |
-| Combined | `localhost:8080` by default | `/` links both pages; `/manager`; `/display` | Internal loopback HTTP listener with an OS-assigned port |
+| Simulator | `localhost:8000` by default | `/` redirects to `/manager`; `/manager` | Own engine |
+| Display | `localhost:8081` by default | `/` redirects to `/display`; `/display` | `-simulator-url`, default `http://localhost:8000` |
+| Combined | `localhost:8000` by default | `/` links both pages; `/manager`; `/display` | Internal loopback HTTP listener with an OS-assigned port |
 
 The simulator owns `/api/*`. The display owns `/display/api/*`. This separation
 allows both route sets on the combined public listener without ambiguous paths.

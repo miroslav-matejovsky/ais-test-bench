@@ -16,7 +16,7 @@ import (
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/app"
 )
 
-const defaultAddr = "localhost:8080"
+const defaultAddr = "localhost:8000"
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))

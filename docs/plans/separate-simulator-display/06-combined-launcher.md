@@ -13,7 +13,7 @@ while reusing the same simulator and display implementations as separate mode.
 ## Implementation work
 
 1. Refactor `internal/app.Run` to compose component constructors and lifecycles.
-   Keep `cmd/ais-test-bench -addr localhost:8080` as the normal combined command.
+   Keep `cmd/ais-test-bench -addr localhost:8000` as the normal combined command.
    There is no combined `-simulator-url`: combined mode owns its simulator.
 2. Create one engine, simulator API handler, and manager handler. Bind an internal
    API listener to `127.0.0.1:0` and obtain the real bound address. Construct the

@@ -73,10 +73,10 @@ tasks:
 # ---- running stuff ----
 
   run:
-    desc: Start the server on http://localhost:8080 (host is explicit to avoid firewall prompts)
+    desc: Start the server on http://localhost:8000 (host is explicit to avoid firewall prompts)
     silent: true
     cmds:
-      - go run ./cmd/ais-test-bench -addr localhost:8080
+      - go run ./cmd/ais-test-bench -addr localhost:8000
 
 # ---- maintenance tasks ----
 

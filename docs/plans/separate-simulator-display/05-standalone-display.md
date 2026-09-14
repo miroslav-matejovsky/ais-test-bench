@@ -14,7 +14,7 @@ display page itself from opening.
 ## Implementation work
 
 1. Add `cmd/display/main.go`, `doc.go`, and CLI tests. Accept `-addr`, default
-   `localhost:8081`, and `-simulator-url`, default `http://localhost:8080`.
+   `localhost:8081`, and `-simulator-url`, default `http://localhost:8000`.
    Validate both before binding listeners. Keep the existing explicit-host
    requirement for listen addresses.
 2. Add the display runtime in `internal/display`: construct the concrete HTTP

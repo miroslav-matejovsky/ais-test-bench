@@ -11,8 +11,8 @@ course. Positions advance once per second at the reported speed.
 task run
 ```
 
-Open [Manager](http://localhost:8080/manager) to adjust the vessel count and inspect
-recent messages. Open [Display](http://localhost:8080/display) for the live map.
+Open [Manager](http://localhost:8000/manager) to adjust the vessel count and inspect
+recent messages. Open [Display](http://localhost:8000/display) for the live map.
 Both pages see the same simulation, including changes made in other browser tabs.
 
 The display uses Leaflet 1.9.4 and OpenStreetMap tiles. The browser needs internet

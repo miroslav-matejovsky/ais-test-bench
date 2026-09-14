@@ -18,14 +18,14 @@ func TestParseAddr(t *testing.T) {
 		{name: "explicit", args: []string{"-addr", "localhost:9000"}, want: "localhost:9000"},
 		{name: "equals form", args: []string{"-addr=127.0.0.1:1"}, want: "127.0.0.1:1"},
 		{name: "ipv6 loopback", args: []string{"-addr", "[::1]:65535"}, want: "[::1]:65535"},
-		{name: "missing host", args: []string{"-addr", ":8080"}, wantErr: true},
+		{name: "missing host", args: []string{"-addr", ":8000"}, wantErr: true},
 		{name: "missing port", args: []string{"-addr", "localhost"}, wantErr: true},
 		{name: "empty port", args: []string{"-addr", "localhost:"}, wantErr: true},
 		{name: "port zero", args: []string{"-addr", "localhost:0"}, wantErr: true},
 		{name: "port too large", args: []string{"-addr", "localhost:65536"}, wantErr: true},
 		{name: "port not a number", args: []string{"-addr", "localhost:http"}, wantErr: true},
-		{name: "unknown flag", args: []string{"-port", "8080"}, wantErr: true},
-		{name: "positional argument", args: []string{"localhost:8080"}, wantErr: true},
+		{name: "unknown flag", args: []string{"-port", "8000"}, wantErr: true},
+		{name: "positional argument", args: []string{"localhost:8000"}, wantErr: true},
 	}
 
 	for _, tt := range tests {
