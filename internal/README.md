@@ -1,9 +1,10 @@
 # Internal packages
 
-The simulator component uses `simulation` for the authoritative fleet, latest
-reports, in-memory messages, and metadata, and `simulator` for its HTTP API,
-manager composition, and runtime. `simulatorapi` holds the simulator API wire
-types shared with its consumers.
+The simulator component uses the public root package `simulation` for the
+authoritative fleet, latest reports, in-memory messages, and metadata. Internal
+`simulation` is the real-time driver that paces that engine. `simulator` holds
+the HTTP API, engine-to-wire conversion, manager composition, and runtime.
+`simulatorapi` holds the simulator API wire types shared with its consumers.
 
 The display component is `display`: a simulator HTTP client, the NMEA-derived
 map projection, the display API, and its runtime. It never imports simulator

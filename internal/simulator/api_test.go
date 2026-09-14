@@ -12,18 +12,21 @@ import (
 	nmea "github.com/adrianmo/go-nmea"
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
-func newHandler(t *testing.T) (*simulation.Simulator, http.Handler) {
+// newHandler returns the engine, its driver, and the standalone handler.
+func newHandler(t *testing.T) (*simulation.Simulator, *simdriver.Driver, http.Handler) {
 	t.Helper()
 	sim, err := simulation.New("run-1", time.Now(), 1)
 	require.NoError(t, err)
-	handler, err := simulator.NewHandler(slog.New(slog.DiscardHandler), sim)
+	driver := simdriver.NewDriver(sim)
+	handler, err := simulator.NewHandler(slog.New(slog.DiscardHandler), driver)
 	require.NoError(t, err)
-	return sim, handler
+	return sim, driver, handler
 }
 
 func serve(handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -45,7 +48,7 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 }
 
 func TestFleetCarriesExactNMEA(t *testing.T) {
-	sim, handler := newHandler(t)
+	sim, _, handler := newHandler(t)
 
 	rec := serve(handler, http.MethodGet, "/api/vessels", "")
 
@@ -65,7 +68,7 @@ func TestFleetCarriesExactNMEA(t *testing.T) {
 }
 
 func TestCountChangesFleetAndHistory(t *testing.T) {
-	sim, handler := newHandler(t)
+	sim, _, handler := newHandler(t)
 
 	grown := decode[simulatorapi.Fleet](t, serve(handler, http.MethodPut, "/api/vessels", `{"count":3}`))
 	require.Len(t, grown.Vessels, 3)
@@ -86,18 +89,28 @@ func TestCountChangesFleetAndHistory(t *testing.T) {
 }
 
 func TestMetadataAPI(t *testing.T) {
-	sim, handler := newHandler(t)
+	sim, _, handler := newHandler(t)
 
 	rec := serve(handler, http.MethodGet, "/api/metadata", "")
 
 	decode[simulatorapi.Metadata](t, rec)
-	want, err := json.Marshal(sim.Metadata())
+	startedAt, err := json.Marshal(sim.Metadata().StartedAt)
 	require.NoError(t, err)
-	require.JSONEq(t, string(want), rec.Body.String())
+	require.JSONEq(t, `{
+		"simulationId": "run-1",
+		"startedAt": `+string(startedAt)+`,
+		"vesselTypes": [{"id": "cargo", "name": "Cargo vessel"}],
+		"supportedMessageTypes": [1],
+		"settings": {
+			"initialVesselCount": 1, "maxVessels": 100, "tickIntervalMs": 1000, "messageIntervalMs": 1000, "messageHistoryLimit": 1000,
+			"speedKnots": {"min": 6, "max": 15.9},
+			"spawnBounds": {"south": 52, "north": 52.04, "west": 3.94, "east": 4}
+		}
+	}`, rec.Body.String())
 }
 
 func TestCountRejectsInvalidRequests(t *testing.T) {
-	sim, handler := newHandler(t)
+	sim, _, handler := newHandler(t)
 	before := sim.Fleet()
 
 	for _, body := range []string{`{}`, `null`, `{"count":null}`, `{"count":-1}`, `{"count":101}`, `{"count":1.5}`, `{"count":"2"}`, `{"count":2,"extra":true}`, `{"count":2} {}`, `{`, strings.Repeat(" ", 1025) + `{"count":2}`} {
@@ -115,7 +128,7 @@ func TestCountRejectsInvalidRequests(t *testing.T) {
 }
 
 func TestStandaloneRoutes(t *testing.T) {
-	_, handler := newHandler(t)
+	_, _, handler := newHandler(t)
 
 	tests := []struct {
 		method      string

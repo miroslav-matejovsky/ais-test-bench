@@ -75,15 +75,22 @@ HTTP in both modes and never reads engine state.
 
 | Package | Responsibility |
 | --- | --- |
+| `simulation` | Public engine: random fleet, movement, AIS encoding, latest reports, recent message history, metadata |
 | `internal/app` | Combined composition: one engine, public and private API listeners, display, shutdown order |
-| `internal/simulator` | Simulator HTTP API, standalone manager routes, engine and HTTP lifecycle |
-| `internal/simulation` | Random fleet, movement, latest reports, recent message history, metadata |
+| `internal/simulator` | Simulator HTTP API with engine-to-wire conversion, standalone manager routes, engine and HTTP lifecycle |
+| `internal/simulation` | Real-time driver: run identity, wall-clock ticks, delegation to the public engine |
 | `internal/simulatorapi` | JSON wire types and documented simulator API contract |
 | `internal/display` | Simulator HTTP client, NMEA-derived projection, display API, standalone lifecycle |
 | `internal/ais` | Encode and decode AIS type 1 position reports; validate NMEA with go-nmea |
 | `internal/ui` | Stateless HTML pages with component-specific navigation, embedded assets |
 | `internal/httpserver` | Shared HTTP server settings and bounded shutdown |
 | `internal/cli` | Shared listen address validation |
+
+Other Go programs can import the engine directly as
+`github.com/miroslav-matejovsky/ais-test-bench/simulation` to generate the same
+traffic without a server. It uses only caller-supplied timestamps and seeds, and
+returns detached copies of its fleet, history, and metadata. See its package
+documentation and example.
 
 The simulator creates a report immediately for every new vessel and after each
 one-second movement tick. Reports contain MMSI, position, speed, course, heading,

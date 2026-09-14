@@ -11,17 +11,19 @@ import (
 	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
 // Run starts a new simulation run and serves the standalone simulator (see
 // NewHandler) on ln until ctx is cancelled. Run takes ownership of ln and
 // closes it, also when construction fails.
 func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
-	sim, err := simulation.New(simulation.NewID(), time.Now(), rand.Uint64())
+	engine, err := simulation.New(simdriver.NewID(), time.Now(), rand.Uint64())
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulation: %w", err), ln.Close())
 	}
+	sim := simdriver.NewDriver(engine)
 	handler, err := NewHandler(logger, sim)
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulator handler: %w", err), ln.Close())
@@ -34,7 +36,7 @@ func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
 // within httpserver.ShutdownTimeout, then the tick loop is stopped and joined.
 // Serve takes ownership of ln and closes it. It returns nil after a clean
 // shutdown.
-func Serve(ctx context.Context, logger *slog.Logger, ln net.Listener, sim *simulation.Simulator, handler http.Handler) error {
+func Serve(ctx context.Context, logger *slog.Logger, ln net.Listener, sim *simdriver.Driver, handler http.Handler) error {
 	server := httpserver.Serve(logger, ln, handler)
 	logger.Info("simulator started", "url", "http://"+ln.Addr().String())
 	simulationCtx, stopSimulation := context.WithCancel(ctx)

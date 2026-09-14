@@ -12,9 +12,10 @@ import (
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
+	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
 // internalAddr is the private simulator API listener of combined mode. The OS
@@ -43,10 +44,11 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	fail := func(err error) error {
 		return errors.Join(err, ln.Close(), internalLn.Close())
 	}
-	sim, err := simulation.New(simulation.NewID(), time.Now(), rand.Uint64())
+	engine, err := simulation.New(simdriver.NewID(), time.Now(), rand.Uint64())
 	if err != nil {
 		return fail(fmt.Errorf("create simulation: %w", err))
 	}
+	sim := simdriver.NewDriver(engine)
 	client, err := display.NewClient("http://" + internalLn.Addr().String())
 	if err != nil {
 		return fail(fmt.Errorf("create display client: %w", err))

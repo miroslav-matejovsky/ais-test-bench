@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
 func get(t *testing.T, url string) []byte {
@@ -64,11 +64,11 @@ func (l failingListener) Close() error              { close(l.closed); return ni
 func (l failingListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
 
 func TestServeFailureClosesListenerAndStopsEngine(t *testing.T) {
-	sim, handler := newHandler(t)
+	_, driver, handler := newHandler(t)
 	ln := failingListener{closed: make(chan struct{})}
 
 	// Serve returns only after the tick loop has exited.
-	err := simulator.Serve(t.Context(), slog.New(slog.DiscardHandler), ln, sim, handler)
+	err := simulator.Serve(t.Context(), slog.New(slog.DiscardHandler), ln, driver, handler)
 
 	require.ErrorContains(t, err, "accept failed")
 	select {

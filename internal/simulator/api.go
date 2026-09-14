@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
-	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
 // maxCountRequestBytes bounds the PUT /api/vessels request body.
@@ -19,10 +19,10 @@ const maxCountRequestBytes = 1024
 
 type api struct {
 	logger *slog.Logger
-	sim    *simulation.Simulator
+	sim    *simdriver.Driver
 }
 
-// NewAPI returns the simulator HTTP API for sim:
+// NewAPI returns the simulator HTTP API for the engine paced by sim:
 //
 //	GET /api/vessels   simulatorapi.Fleet
 //	PUT /api/vessels   simulatorapi.CountRequest in, simulatorapi.Fleet out
@@ -31,7 +31,7 @@ type api struct {
 //
 // Mount it at /api/. The handler is stateless apart from sim, so mounting it on
 // several listeners serves one engine consistently.
-func NewAPI(logger *slog.Logger, sim *simulation.Simulator) http.Handler {
+func NewAPI(logger *slog.Logger, sim *simdriver.Driver) http.Handler {
 	a := &api{logger: logger, sim: sim}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/vessels", a.fleet)
@@ -42,15 +42,15 @@ func NewAPI(logger *slog.Logger, sim *simulation.Simulator) http.Handler {
 }
 
 func (a *api) fleet(w http.ResponseWriter, r *http.Request) {
-	a.writeJSON(w, r, a.sim.Fleet())
+	a.writeJSON(w, r, fleetResponse(a.sim.Fleet()))
 }
 
 func (a *api) history(w http.ResponseWriter, r *http.Request) {
-	a.writeJSON(w, r, a.sim.History())
+	a.writeJSON(w, r, historyResponse(a.sim.History()))
 }
 
 func (a *api) metadata(w http.ResponseWriter, r *http.Request) {
-	a.writeJSON(w, r, a.sim.Metadata())
+	a.writeJSON(w, r, metadataResponse(a.sim.Metadata()))
 }
 
 // setCount validates one JSON CountRequest before touching the engine, so an
@@ -81,12 +81,12 @@ func (a *api) setCount(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("count must be between 0 and %d", simulation.MaxVessels), http.StatusBadRequest)
 		return
 	}
-	if err := a.sim.SetCount(*input.Count, time.Now()); err != nil {
+	if err := a.sim.SetCount(*input.Count); err != nil {
 		a.logger.Error("set vessel count", "count", *input.Count, "error", err)
 		http.Error(w, "could not update vessel count", http.StatusInternalServerError)
 		return
 	}
-	a.writeJSON(w, r, a.sim.Fleet())
+	a.writeJSON(w, r, fleetResponse(a.sim.Fleet()))
 }
 
 func (a *api) writeJSON(w http.ResponseWriter, r *http.Request, value any) {

@@ -1,8 +1,6 @@
 package simulation
 
 import (
-	"context"
-	"crypto/rand"
 	"fmt"
 	"math"
 	mathrand "math/rand/v2"
@@ -11,17 +9,17 @@ import (
 	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 )
 
 const (
-	// MaxVessels limits the workload of this local simulator.
+	// MaxVessels limits the fleet size accepted by SetCount.
 	MaxVessels = 100
 	// MessageLimit is the number of latest AIS reports retained in memory.
 	MessageLimit = 1000
 	// InitialVesselCount is the fleet size created by New.
 	InitialVesselCount = 1
-	// TickInterval is the movement and report cadence used by Run.
+	// TickInterval is the intended movement and report cadence between Advance
+	// calls. Metadata reports it as the tick and message interval.
 	TickInterval = time.Second
 )
 
@@ -39,7 +37,7 @@ const (
 )
 
 // vesselTypes is the application vessel category catalog.
-var vesselTypes = []simulatorapi.VesselType{{ID: cargoTypeID, Name: "Cargo vessel"}}
+var vesselTypes = []VesselType{{ID: cargoTypeID, Name: "Cargo vessel"}}
 
 // vesselState is one active vessel: navigation state, stable synthetic identity,
 // and latest report. Invariant: report is the encoding of the current Position,
@@ -48,13 +46,14 @@ type vesselState struct {
 	ais.Position
 	name   string
 	typeID string
-	report simulatorapi.Message
+	report Message
 }
 
 // Simulator owns vessels, its random source, and recent messages under one lock.
 // Every mutation prepares and encodes all reports before publishing any state,
 // so a failed update leaves vessels, reports, history, and timestamps unchanged.
-// Construct it with New, then call Run once for its lifetime.
+// Construct it with New. It starts no goroutine and reads no clock; callers
+// supply every timestamp.
 type Simulator struct {
 	// id and startedAt are immutable after New and read without the lock.
 	id        string
@@ -63,21 +62,15 @@ type Simulator struct {
 	mu        sync.Mutex
 	random    *mathrand.Rand
 	vessels   []vesselState
-	messages  []simulatorapi.Message // Oldest first, at most MessageLimit.
+	messages  []Message // Oldest first, at most MessageLimit.
 	nextMMSI  uint32
 	sequence  uint64 // Last emitted report sequence; 0 before the first report.
 	updatedAt time.Time
 }
 
-// NewID returns a random opaque simulation identity. Call it once per engine
-// start so runs using the same seed remain distinguishable.
-func NewID() string {
-	return rand.Text()
-}
-
 // New starts simulation run id with InitialVesselCount randomly positioned
 // vessels and their first AIS reports. The identity, seed, and time are
-// explicit so tests can reproduce a run.
+// explicit so a run can be reproduced.
 func New(id string, now time.Time, seed uint64) (*Simulator, error) {
 	if id == "" {
 		return nil, fmt.Errorf("simulation id is required")
@@ -85,7 +78,7 @@ func New(id string, now time.Time, seed uint64) (*Simulator, error) {
 	s := &Simulator{
 		id: id, startedAt: now.UTC(),
 		random:  mathrand.New(mathrand.NewPCG(seed, seed^0xa15)),
-		vessels: make([]vesselState, 0), messages: make([]simulatorapi.Message, 0),
+		vessels: make([]vesselState, 0), messages: make([]Message, 0),
 		nextMMSI: firstMMSI, updatedAt: now.UTC(),
 	}
 	if err := s.SetCount(InitialVesselCount, now); err != nil {
@@ -115,7 +108,7 @@ func (s *Simulator) SetCount(count int, now time.Time) error {
 		return nil
 	}
 	added := make([]vesselState, 0, count-len(s.vessels))
-	reports := make([]simulatorapi.Message, 0, cap(added))
+	reports := make([]Message, 0, cap(added))
 	mmsi := s.nextMMSI
 	for range cap(added) {
 		course := float64(s.random.IntN(360))
@@ -141,27 +134,10 @@ func (s *Simulator) SetCount(count int, now time.Time) error {
 	return nil
 }
 
-// Run advances the simulation every TickInterval until cancellation or an
-// encoding error. The simplified reporting cadence is intended for live UI
-// development.
-func (s *Simulator) Run(ctx context.Context) error {
-	ticker := time.NewTicker(TickInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case now := <-ticker.C:
-			if err := s.Advance(now); err != nil {
-				return err
-			}
-		}
-	}
-}
-
 // Advance moves vessels along a great circle at their fixed random speed and
 // course, then records a report for each. Times not after the latest update are
-// ignored. The update time advances even when the fleet is empty.
+// ignored. The update time advances even when the fleet is empty. One call emits
+// at most one report per vessel, regardless of the elapsed interval.
 func (s *Simulator) Advance(now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -169,7 +145,7 @@ func (s *Simulator) Advance(now time.Time) error {
 		return nil
 	}
 	next := slices.Clone(s.vessels)
-	reports := make([]simulatorapi.Message, 0, len(next))
+	reports := make([]Message, 0, len(next))
 	for i := range next {
 		vessel := &next[i]
 		if !now.After(vessel.UpdatedAt) {
@@ -197,18 +173,18 @@ func (s *Simulator) Advance(now time.Time) error {
 }
 
 // encode prepares the report for p with the given sequence without publishing it.
-func encode(p ais.Position, sequence uint64) (simulatorapi.Message, error) {
+func encode(p ais.Position, sequence uint64) (Message, error) {
 	sentence, err := ais.EncodePosition(p)
 	if err != nil {
-		return simulatorapi.Message{}, fmt.Errorf("encode vessel %d: %w", p.MMSI, err)
+		return Message{}, fmt.Errorf("encode vessel %d: %w", p.MMSI, err)
 	}
-	return simulatorapi.Message{Sequence: sequence, MMSI: p.MMSI, Timestamp: p.UpdatedAt, Sentence: sentence}, nil
+	return Message{Sequence: sequence, MMSI: p.MMSI, Timestamp: p.UpdatedAt, Sentence: sentence}, nil
 }
 
 // publish appends prepared reports to history, evicting the oldest beyond
 // MessageLimit, and moves the update time forward. Called with the lock held
 // after every report of the mutation was encoded.
-func (s *Simulator) publish(reports []simulatorapi.Message, now time.Time) {
+func (s *Simulator) publish(reports []Message, now time.Time) {
 	if len(reports) > 0 {
 		s.sequence = reports[len(reports)-1].Sequence
 	}
@@ -222,29 +198,29 @@ func (s *Simulator) publish(reports []simulatorapi.Message, now time.Time) {
 }
 
 // Fleet returns a copy of the active fleet with each vessel's latest report.
-func (s *Simulator) Fleet() simulatorapi.Fleet {
+func (s *Simulator) Fleet() Fleet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	vessels := make([]simulatorapi.Vessel, 0, len(s.vessels))
+	vessels := make([]Vessel, 0, len(s.vessels))
 	for _, vessel := range s.vessels {
-		vessels = append(vessels, simulatorapi.Vessel{
+		vessels = append(vessels, Vessel{
 			MMSI: vessel.MMSI, Name: vessel.name, TypeID: vessel.typeID,
-			Report: simulatorapi.Report{Sequence: vessel.report.Sequence, Timestamp: vessel.report.Timestamp, Sentence: vessel.report.Sentence},
+			Report: Report{Sequence: vessel.report.Sequence, Timestamp: vessel.report.Timestamp, Sentence: vessel.report.Sentence},
 		})
 	}
-	return simulatorapi.Fleet{
+	return Fleet{
 		SimulationID: s.id, UpdatedAt: s.updatedAt,
 		MessageCount: len(s.messages), MessageLimit: MessageLimit, Vessels: vessels,
 	}
 }
 
 // History returns a copy of the retained reports, ordered oldest first.
-func (s *Simulator) History() simulatorapi.History {
+func (s *Simulator) History() History {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	history := simulatorapi.History{
+	history := History{
 		SimulationID: s.id, MessageLimit: MessageLimit,
-		Messages: append([]simulatorapi.Message{}, s.messages...),
+		Messages: append([]Message{}, s.messages...),
 	}
 	if len(s.messages) > 0 {
 		oldest, latest := s.messages[0].Sequence, s.messages[len(s.messages)-1].Sequence
@@ -255,20 +231,20 @@ func (s *Simulator) History() simulatorapi.History {
 
 // Metadata returns the run identity, vessel type catalog, and the settings the
 // engine actually uses.
-func (s *Simulator) Metadata() simulatorapi.Metadata {
-	return simulatorapi.Metadata{
+func (s *Simulator) Metadata() Metadata {
+	return Metadata{
 		SimulationID:          s.id,
 		StartedAt:             s.startedAt,
 		VesselTypes:           slices.Clone(vesselTypes),
 		SupportedMessageTypes: []int{positionReport},
-		Settings: simulatorapi.Settings{
+		Settings: Settings{
 			InitialVesselCount:  InitialVesselCount,
 			MaxVessels:          MaxVessels,
 			TickIntervalMs:      TickInterval.Milliseconds(),
 			MessageIntervalMs:   TickInterval.Milliseconds(),
 			MessageHistoryLimit: MessageLimit,
-			SpeedKnots:          simulatorapi.SpeedRange{Min: minSpeedKnots, Max: minSpeedKnots + (speedSteps-1)/10.0},
-			SpawnBounds: simulatorapi.SpawnBounds{
+			SpeedKnots:          SpeedRange{Min: minSpeedKnots, Max: minSpeedKnots + (speedSteps-1)/10.0},
+			SpawnBounds: SpawnBounds{
 				South: spawnSouth, North: spawnSouth + spawnLatSpan,
 				West: spawnWest, East: spawnWest + spawnLonSpan,
 			},

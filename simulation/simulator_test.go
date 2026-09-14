@@ -1,7 +1,6 @@
 package simulation_test
 
 import (
-	"context"
 	"math"
 	"sync"
 	"testing"
@@ -11,8 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 
 const runID = "run-1"
@@ -27,7 +25,7 @@ func newSimulator(t *testing.T, seed uint64) *simulation.Simulator {
 }
 
 // decode returns the navigation data of a vessel's latest report.
-func decode(t *testing.T, vessel simulatorapi.Vessel) ais.Report {
+func decode(t *testing.T, vessel simulation.Vessel) ais.Report {
 	t.Helper()
 	report, err := ais.DecodePosition(vessel.Report.Sentence)
 	require.NoError(t, err)
@@ -119,7 +117,7 @@ func TestReportsDescribeActiveFleet(t *testing.T) {
 	for i, vessel := range fleet.Vessels {
 		require.Equal(t, uint64(i+4), vessel.Report.Sequence)
 		require.Equal(t, moved, vessel.Report.Timestamp)
-		require.Equal(t, simulatorapi.Message{
+		require.Equal(t, simulation.Message{
 			Sequence: vessel.Report.Sequence, MMSI: vessel.MMSI,
 			Timestamp: vessel.Report.Timestamp, Sentence: vessel.Report.Sentence,
 		}, history.Messages[i+3])
@@ -141,7 +139,7 @@ func TestReportsDescribeActiveFleet(t *testing.T) {
 	require.Equal(t, reduced, s.Fleet().UpdatedAt)
 
 	require.NoError(t, s.SetCount(0, start.Add(5*time.Second)))
-	require.NotNil(t, s.Fleet().Vessels, "an empty fleet encodes as []")
+	require.NotNil(t, s.Fleet().Vessels, "an empty fleet is a non-nil slice")
 	require.Empty(t, s.Fleet().Vessels)
 }
 
@@ -174,6 +172,7 @@ func TestReadsReturnCopies(t *testing.T) {
 	history := s.History()
 	history.Messages[0].Sentence = "changed"
 	*history.OldestSequence = 99
+	*history.LatestSequence = 99
 	metadata := s.Metadata()
 	metadata.VesselTypes[0].Name = "changed"
 	metadata.SupportedMessageTypes[0] = 99
@@ -187,15 +186,15 @@ func TestReadsReturnCopies(t *testing.T) {
 func TestMetadataDescribesGeneration(t *testing.T) {
 	s := newSimulator(t, 3)
 	metadata := s.Metadata()
-	require.Equal(t, simulatorapi.Metadata{
+	require.Equal(t, simulation.Metadata{
 		SimulationID:          runID,
 		StartedAt:             start,
-		VesselTypes:           []simulatorapi.VesselType{{ID: "cargo", Name: "Cargo vessel"}},
+		VesselTypes:           []simulation.VesselType{{ID: "cargo", Name: "Cargo vessel"}},
 		SupportedMessageTypes: []int{1},
-		Settings: simulatorapi.Settings{
+		Settings: simulation.Settings{
 			InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, MessageHistoryLimit: 1000,
-			SpeedKnots:  simulatorapi.SpeedRange{Min: 6, Max: 15.9},
-			SpawnBounds: simulatorapi.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
+			SpeedKnots:  simulation.SpeedRange{Min: 6, Max: 15.9},
+			SpawnBounds: simulation.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
 		},
 	}, metadata)
 	require.Len(t, s.Fleet().Vessels, metadata.Settings.InitialVesselCount)
@@ -214,7 +213,7 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 		require.LessOrEqual(t, *report.Longitude, bounds.East)
 		require.GreaterOrEqual(t, *report.Speed, speed.Min)
 		require.LessOrEqual(t, *report.Speed, speed.Max)
-		require.Contains(t, metadata.VesselTypes, simulatorapi.VesselType{ID: vessel.TypeID, Name: "Cargo vessel"})
+		require.Contains(t, metadata.VesselTypes, simulation.VesselType{ID: vessel.TypeID, Name: "Cargo vessel"})
 	}
 }
 
@@ -229,28 +228,22 @@ func TestRunIdentity(t *testing.T) {
 	_, err := simulation.New("", start, 1)
 	require.Error(t, err)
 
-	a, err := simulation.New(simulation.NewID(), start, 42)
-	require.NoError(t, err)
-	b, err := simulation.New(simulation.NewID(), start, 42)
-	require.NoError(t, err)
-	require.NotEmpty(t, a.Metadata().SimulationID)
-	require.NotEqual(t, a.Metadata().SimulationID, b.Metadata().SimulationID)
-	require.Equal(t, a.Metadata().SimulationID, a.Fleet().SimulationID)
-	require.Equal(t, a.Metadata().SimulationID, a.History().SimulationID)
+	s := newSimulator(t, 42)
+	require.Equal(t, runID, s.Metadata().SimulationID)
+	require.Equal(t, runID, s.Fleet().SimulationID)
+	require.Equal(t, runID, s.History().SimulationID)
 }
 
-func TestConcurrentAccessAndCancellation(t *testing.T) {
-	now := time.Now()
-	s, err := simulation.New(runID, now, 1)
-	require.NoError(t, err)
+func TestConcurrentAccess(t *testing.T) {
+	s := newSimulator(t, 1)
 	var group sync.WaitGroup
 	for range 4 {
 		group.Go(func() {
 			for i := range 25 {
-				if err := s.SetCount(i, now); err != nil {
+				if err := s.SetCount(i, start); err != nil {
 					t.Error(err)
 				}
-				if err := s.Advance(now.Add(time.Duration(i) * time.Second)); err != nil {
+				if err := s.Advance(start.Add(time.Duration(i) * time.Second)); err != nil {
 					t.Error(err)
 				}
 				s.Fleet()
@@ -260,9 +253,6 @@ func TestConcurrentAccessAndCancellation(t *testing.T) {
 		})
 	}
 	group.Wait()
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	require.NoError(t, s.Run(ctx))
 }
 
 func requireValidNMEA(t *testing.T, sentence string) {
@@ -272,7 +262,7 @@ func requireValidNMEA(t *testing.T, sentence string) {
 	require.NoError(t, err)
 }
 
-func requireBounds(t *testing.T, history simulatorapi.History, oldest, latest uint64) {
+func requireBounds(t *testing.T, history simulation.History, oldest, latest uint64) {
 	t.Helper()
 	require.NotNil(t, history.OldestSequence)
 	require.NotNil(t, history.LatestSequence)
