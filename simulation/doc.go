@@ -33,8 +33,30 @@
 // a config revision, increased by every effective edit, and an RF revision,
 // increased by every edit except a name-only one. A no-op edit keeps both. The
 // StationSet revision starts at 1, increases with every effective add, edit, or
-// removal, and is the expected revision of the next edit. Stations holds the
-// configuration only; reception is future work.
+// removal, and is the expected revision of the next edit. Station latitude is
+// limited to [-85, 85], the web map range.
+//
+// # Reception model
+//
+// One deterministic model estimates, per station channel and transmitter
+// position, the geodesic distance and bearing, a 4/3-earth radio horizon, the
+// received power from transmitter power and gains, free-space loss at the
+// channel frequency, a fixed site loss and path exponent, and shadow sector
+// loss. The margin against sensitivity plus noise penalty maps to a decode
+// probability through fixed knots, multiplied by a horizon taper and by one
+// minus the channel drop probability. Disabled stations and channels have
+// probability 0. Metadata.Settings.Reception publishes every parameter. The
+// values are empirical test-bench choices, not calibrated predictions.
+//
+// Receive decisions hash the run seed, station ID, RF revision, and
+// transmission sequence into a uniform draw, so they never consume vessel
+// randomness and do not depend on batching or station order. Wiring decisions
+// into generated reports is future work.
+//
+// Station.Coverage holds 0.9 and 0.5 probability contours per channel for
+// Settings.Transmitter, computed with the same function whenever the RF
+// revision changes. Rings sample every 5 degrees plus both sides of each shadow
+// sector boundary, and bisect each radius over the horizon.
 //
 // Station errors separate their causes: ErrInvalid for a rejected definition,
 // ErrConflict for a stale expected revision, ErrNotFound for an unknown ID, and
@@ -66,6 +88,8 @@
 // reports already evicted from the MessageLimit history. Latest reports describe
 // exactly the active fleet. Sentences are checksummed type 1 !AIVDM lines
 // including CRLF; their UTC second field is the second of the report timestamp.
+// Each vessel alternates its reports between AIS channels A and B, starting on
+// A for an even MMSI and on B for an odd one.
 //
 // # Atomicity and concurrency
 //

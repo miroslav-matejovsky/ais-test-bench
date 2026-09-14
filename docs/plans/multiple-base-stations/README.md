@@ -1,8 +1,11 @@
 # Multiple AIS base stations
 
-Status: in progress. Prepared 2026-09-14. Step 01 (station configuration) is
-implemented; steps 02-07 are future work. The "Current implementation" section
-describes the code before step 01.
+Status: in progress. Prepared 2026-09-14. Steps 01 (station configuration) and
+02 (reception and coverage model) are implemented; steps 03-07 are future work.
+The "Current implementation" section describes the code before step 01. As a
+proof of concept, the model has no version: it is replaced in place when it
+changes, and its parameters are fixed engine constants published in metadata.
+Station latitude is limited to [-85, 85] instead of handling polar coverage.
 
 ## Goal and value
 

@@ -39,7 +39,7 @@ var (
 	transmitterHeightRange = interval{low: 0, high: 100, lowOpen: true, unit: "m"}
 	gainRange              = interval{low: -10, high: 20, unit: "dBi"}
 	feederLossRange        = interval{low: 0, high: 30, unit: "dB"}
-	latitudeRange          = interval{low: -90, high: 90, unit: "degrees"}
+	latitudeRange          = interval{low: -85, high: 85, unit: "degrees"}
 	longitudeRange         = interval{low: -180, high: 180, unit: "degrees"}
 	stationHeightRange     = interval{low: 0, high: 500, lowOpen: true, unit: "m"}
 	sensitivityRange       = interval{low: -125, high: -80, unit: "dBm"}
@@ -67,14 +67,15 @@ func (r interval) check(field string, v float64) error {
 	return nil
 }
 
-// stationState is one configured station. definition is canonical and never
-// mutated in place; edits replace it, so state copies may share its sectors.
+// stationState is one configured station. definition and coverage are never
+// mutated in place; edits replace them, so state copies may share them.
 type stationState struct {
 	id             string
 	definition     StationDefinition
 	configRevision uint64
 	rfRevision     uint64
 	createdAt      time.Time
+	coverage       []Coverage // Computed for the current RF revision.
 }
 
 // ValidateStation returns the error AddStation, UpdateStation, and New return
@@ -123,6 +124,7 @@ func (s *Simulator) AddStation(expectedRevision uint64, definition StationDefini
 		id: stationID(s.state.lastStationID), definition: canonical,
 		configRevision: firstRevision, rfRevision: firstRevision,
 		createdAt: s.start.Add(s.state.elapsed),
+		coverage:  computeCoverage(s.transmitter, canonical),
 	}
 	s.state.stations = append(s.state.stations, station)
 	s.state.stationRevision++
@@ -167,6 +169,7 @@ func (s *Simulator) UpdateStation(expectedRevision uint64, id string, definition
 	station.configRevision++
 	if rfChanged {
 		station.rfRevision++
+		station.coverage = computeCoverage(s.transmitter, canonical)
 	}
 	s.state.stations[i] = station
 	s.state.stationRevision++
@@ -199,7 +202,7 @@ func (s *Simulator) RemoveStation(expectedRevision uint64, id string) (StationSe
 }
 
 // newStations validates the initial definitions and assigns IDs in order.
-func newStations(definitions []StationDefinition, at time.Time) ([]stationState, error) {
+func newStations(definitions []StationDefinition, at time.Time, tx TransmitterProfile) ([]stationState, error) {
 	if len(definitions) > MaxStations {
 		return nil, fmt.Errorf("%w: station count must be between 0 and %d: %d", ErrInvalid, MaxStations, len(definitions))
 	}
@@ -212,6 +215,7 @@ func newStations(definitions []StationDefinition, at time.Time) ([]stationState,
 		stations = append(stations, stationState{
 			id: stationID(uint64(i + 1)), definition: canonical,
 			configRevision: firstRevision, rfRevision: firstRevision, createdAt: at,
+			coverage: computeCoverage(tx, canonical),
 		})
 	}
 	return stations, nil
@@ -228,10 +232,14 @@ func (s *Simulator) stationSet() StationSet {
 	for _, station := range s.state.stations {
 		definition := station.definition
 		definition.ShadowSectors = slices.Clone(definition.ShadowSectors)
+		coverage := slices.Clone(station.coverage)
+		for i := range coverage {
+			coverage[i].Ring = slices.Clone(coverage[i].Ring)
+		}
 		stations = append(stations, Station{
 			ID: station.id, Definition: definition,
 			ConfigRevision: station.configRevision, RFRevision: station.rfRevision,
-			CreatedAt: station.createdAt,
+			CreatedAt: station.createdAt, Coverage: coverage,
 		})
 	}
 	return StationSet{SimulationID: s.id, Revision: s.state.stationRevision, Stations: stations}

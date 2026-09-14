@@ -85,19 +85,21 @@ func TestDecodeKnownReports(t *testing.T) {
 	// coordinate unit or the published precision.
 	tests := []struct {
 		sentence            string
+		channel             ais.Channel
 		mmsi                uint32
 		latitude, longitude float64
 		tolerance           float64
 		speed, course       float64
 		heading, second     int
 	}{
-		{sentence: "!AIVDM,1,1,,B,177KQJ5000G?tO`K>RA1wUbN0TKH,0*5C", mmsi: 477553000, latitude: 47.582833, longitude: -122.345832, tolerance: coordinateTolerance, speed: 0, course: 51, heading: 181, second: 15},
-		{sentence: "!AIVDM,1,1,,A,15RTgt0PAso;90TKcjM8h6g208CQ,0*4A", mmsi: 371798000, latitude: 48.38163, longitude: -123.395383, tolerance: 1e-5, speed: 12.3, course: 224, heading: 215, second: 33},
+		{sentence: "!AIVDM,1,1,,B,177KQJ5000G?tO`K>RA1wUbN0TKH,0*5C", channel: ais.ChannelB, mmsi: 477553000, latitude: 47.582833, longitude: -122.345832, tolerance: coordinateTolerance, speed: 0, course: 51, heading: 181, second: 15},
+		{sentence: "!AIVDM,1,1,,A,15RTgt0PAso;90TKcjM8h6g208CQ,0*4A", channel: ais.ChannelA, mmsi: 371798000, latitude: 48.38163, longitude: -123.395383, tolerance: 1e-5, speed: 12.3, course: 224, heading: 215, second: 33},
 	}
 	for _, tt := range tests {
 		t.Run(tt.sentence, func(t *testing.T) {
 			report, err := ais.DecodePosition(tt.sentence)
 			require.NoError(t, err)
+			require.Equal(t, tt.channel, report.Channel)
 			require.Equal(t, tt.mmsi, report.MMSI)
 			require.InDelta(t, tt.latitude, *report.Latitude, tt.tolerance)
 			require.InDelta(t, tt.longitude, *report.Longitude, tt.tolerance)
@@ -153,7 +155,7 @@ func TestDecodeFieldBoundaries(t *testing.T) {
 		{"all unavailable", func(f *type1) {
 			f.lat, f.lon, f.speed, f.course, f.heading, f.second = 54600000, 108600000, 1023, 3600, 511, 60
 		}, func(t *testing.T, r ais.Report) {
-			require.Equal(t, ais.Report{MMSI: 234567890}, r)
+			require.Equal(t, ais.Report{MMSI: 234567890, Channel: ais.ChannelA}, r)
 		}},
 		{"longitude unavailable hides position", func(f *type1) { f.lon = 108600000 }, func(t *testing.T, r ais.Report) {
 			require.Nil(t, r.Latitude)
@@ -180,14 +182,16 @@ func TestDecodeFieldBoundaries(t *testing.T) {
 }
 
 func TestDecodeEncoderRoundTrip(t *testing.T) {
-	for _, coordinates := range [][2]float64{{54.123456, 3.654321}, {-33.876543, -70.123456}, {90, 180}, {-90, -180}, {0, 0}} {
+	for i, coordinates := range [][2]float64{{54.123456, 3.654321}, {-33.876543, -70.123456}, {90, 180}, {-90, -180}, {0, 0}} {
+		channel := []ais.Channel{ais.ChannelA, ais.ChannelB}[i%2]
 		p := ais.Position{MMSI: 234567890, Latitude: coordinates[0], Longitude: coordinates[1], Speed: 12.3, Course: 123.4, Heading: 359, UpdatedAt: time.Date(2026, 9, 14, 12, 30, 42, 0, time.UTC)}
-		sentence, err := ais.EncodePosition(p)
+		sentence, err := ais.EncodePosition(p, channel)
 		require.NoError(t, err)
 
 		report, err := ais.DecodePosition(sentence)
 
 		require.NoError(t, err)
+		require.Equal(t, channel, report.Channel)
 		require.Equal(t, p.MMSI, report.MMSI)
 		require.InDelta(t, p.Latitude, *report.Latitude, coordinateTolerance)
 		require.InDelta(t, p.Longitude, *report.Longitude, coordinateTolerance)
@@ -213,6 +217,8 @@ func TestDecodeRejectsUnsupportedReports(t *testing.T) {
 		"own vessel VDO":      frame("AIVDO,1,1,,A," + valid.payload() + ",0"),
 		"other talker":        frame("BSVDM,1,1,,A," + valid.payload() + ",0"),
 		"fill bits":           frame("AIVDM,1,1,,A," + valid.payload() + ",2"),
+		"missing channel":     frame("AIVDM,1,1,,," + valid.payload() + ",0"),
+		"numeric channel":     frame("AIVDM,1,1,,1," + valid.payload() + ",0"),
 		"short payload":       with(func(f *type1) { f.extraBits = -6 }),
 		"long payload":        with(func(f *type1) { f.extraBits = 6 }),
 		"message type 2":      with(func(f *type1) { f.msgType = 2 }),

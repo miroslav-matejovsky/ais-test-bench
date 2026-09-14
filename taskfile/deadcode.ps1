@@ -30,6 +30,12 @@ $allow = @(
     'Driver.RemoveStation'
     'Driver.Stations'
     'Driver.prepareStationEdit'
+    # Staged reception decisions, reachable once generated reports are evaluated
+    # at stations (docs/plans/multiple-base-stations step 03). Temporary.
+    'evaluateLink'
+    'decide'
+    'receptionDraw'
+    'geodesic'
 )
 
 $out = deadcode ./cmd/... 2>&1

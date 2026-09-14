@@ -40,7 +40,7 @@ func ExampleNew() {
 	fmt.Println("missing ID rejected:", errors.Is(err, simulation.ErrInvalid))
 	// Output:
 	// 1 200000000 2030-01-02T03:04:05Z !AIVDM,1,1,,A,12vg200P0w0B9jjMiLDPe0T:0000,0*1D
-	// 2 200000001 2030-01-02T03:04:05Z !AIVDM,1,1,,A,12vg20@P1n0B@wjMhDVo9Uf:0000,0*3E
+	// 2 200000001 2030-01-02T03:04:05Z !AIVDM,1,1,,B,12vg20@P1n0B@wjMhDVo9Uf:0000,0*3D
 	// missing ID rejected: true
 }
 

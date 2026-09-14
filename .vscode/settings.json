@@ -75,6 +75,7 @@
     "healthz",
     "HTMX",
     "httpserver",
+    "httptest",
     "LASTEXITCODE",
     "matejovsky",
     "mathrand",

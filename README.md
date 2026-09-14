@@ -86,7 +86,8 @@ Packages, their responsibilities, and their allowed dependencies are defined in
 
 The simulator creates a report immediately for every new vessel and at every
 one-second virtual tick. Reports contain MMSI, position, speed, course, heading,
-and UTC seconds, framed as checksummed `!AIVDM` sentences with CRLF. The small
+and UTC seconds, framed as checksummed `!AIVDM` sentences with CRLF. Each vessel
+alternates between AIS channels A and B. The small
 codec uses [go-nmea](https://github.com/adrianmo/go-nmea) to validate each sentence.
 The application starts virtual time at the real startup instant and delivers
 measured wall-clock time every 100 ms of real time at the current speed, 1x by
@@ -134,7 +135,7 @@ if err != nil {
     return err
 }
 for _, report := range reports {
-    decode(report.Sentence) // "!AIVDM,1,1,,A,...*hh\r\n"
+    decode(report.Sentence) // "!AIVDM,1,1,,A,...*hh\r\n", channel A or B
 }
 ```
 
@@ -147,7 +148,14 @@ for _, report := range reports {
   up to 8 shadow sectors. `AddStation`, `UpdateStation`, and `RemoveStation` take
   the expected `Stations().Revision`; errors wrap `ErrInvalid`, `ErrConflict`,
   `ErrNotFound`, or `ErrLimit`. IDs are never reused. Name-only edits keep the
-  RF revision. Stations do not change vessel reports. Reception is future work.
+  RF revision. Stations do not change vessel reports. Station latitude is
+  limited to -85 to 85.
+- **Reception model:** one deterministic link budget with a radio horizon gives
+  each station channel a receive probability for the reference transmitter.
+  Its fixed parameters are in `Metadata().Settings.Reception`; they are
+  test-bench choices, not calibrated predictions. Each station carries 90% and
+  50% coverage rings per channel from the same model. Applying reception to
+  generated reports is future work.
   The application starts with three demonstration sites, documented in
   `internal/simdriver`.
 - **Messages:** `SetCount` returns the creation reports; `Advance` and `Elapse`

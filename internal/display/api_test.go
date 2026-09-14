@@ -27,7 +27,7 @@ const noPositionSentence = "!AIVDM,1,1,,A,12vg20PP1@<tSF0l4Q@3Q2l:0000,0*65\r\n"
 
 func sentence(t *testing.T, mmsi uint32, latitude, longitude float64) string {
 	t.Helper()
-	s, err := ais.EncodePosition(ais.Position{MMSI: mmsi, Latitude: latitude, Longitude: longitude, Speed: 10.5, Course: 45, Heading: 45, UpdatedAt: reportTime})
+	s, err := ais.EncodePosition(ais.Position{MMSI: mmsi, Latitude: latitude, Longitude: longitude, Speed: 10.5, Course: 45, Heading: 45, UpdatedAt: reportTime}, ais.ChannelA)
 	require.NoError(t, err)
 	return s
 }

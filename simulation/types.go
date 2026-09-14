@@ -44,7 +44,8 @@ type StationDefinition struct {
 	// Name is a required display label of at most MaxStationNameRunes runes of
 	// valid UTF-8, so at most 320 bytes. It is not blank. Duplicates are allowed.
 	Name string
-	// Latitude is WGS84 decimal degrees in [-90, 90].
+	// Latitude is WGS84 decimal degrees in [-85, 85], the web map range, so
+	// coverage never encircles a pole.
 	Latitude float64
 	// Longitude is WGS84 decimal degrees in [-180, 180]; 180 is stored as -180.
 	Longitude float64
@@ -104,6 +105,67 @@ type Station struct {
 	RFRevision uint64
 	// CreatedAt is the virtual UTC instant the station was added.
 	CreatedAt time.Time
+	// Coverage holds the contours for channel A then B, each at probability 0.9
+	// then 0.5, for Settings.Transmitter. It changes only with the RF revision.
+	Coverage []Coverage
+}
+
+// Channel is an AIS VHF data channel.
+type Channel string
+
+// The two AIS channels. Every vessel alternates between them.
+const (
+	ChannelA Channel = "A" // AIS 1, 161.975 MHz.
+	ChannelB Channel = "B" // AIS 2, 162.025 MHz.
+)
+
+// Coverage is the estimated area where a transmission from the reference
+// transmitter reaches at least Threshold reception probability on one station
+// channel. It is a model estimate from the same function that decides
+// reception; actual decisions never test ring membership.
+type Coverage struct {
+	Channel   Channel
+	Threshold float64
+	// MinRadiusMeters and MaxRadiusMeters bound the sampled radii; both are 0
+	// for an empty ring.
+	MinRadiusMeters float64
+	MaxRadiusMeters float64
+	// Ring is a closed WGS84 polygon ring, first point repeated last, sampled
+	// every 5 degrees clockwise from north plus both sides of every shadow
+	// sector boundary. Longitudes stay continuous around the station, so near
+	// the antimeridian they can leave [-180, 180]. It is empty, not nil, when
+	// the station, the channel, or the threshold is unreachable.
+	Ring []GeoPoint
+}
+
+// GeoPoint is a WGS84 position in decimal degrees.
+type GeoPoint struct {
+	Latitude  float64
+	Longitude float64
+}
+
+// ReceptionModel lists the fixed parameters and assumptions of the reception
+// model. Values are empirical test-bench choices, not calibrated predictions.
+type ReceptionModel struct {
+	// SiteLossDB is excess loss in dB on every path.
+	SiteLossDB float64
+	// PathExponent adds 10*(PathExponent-2)*log10(km) dB beyond 1 km.
+	PathExponent float64
+	// EffectiveEarthRadiusFactor scales the earth radius of the radio horizon.
+	EffectiveEarthRadiusFactor float64
+	ChannelAFrequencyMHz       float64
+	ChannelBFrequencyMHz       float64
+	// HorizonTaperStart is the fraction of the horizon where probability starts
+	// to fall linearly to 0 at the horizon.
+	HorizonTaperStart float64
+	// Margin probability interpolates linearly through
+	// (ZeroProbabilityMarginDB, 0), (0 dB, ReferenceProbability), and
+	// (FullProbabilityMarginDB, 1), clamped outside.
+	ZeroProbabilityMarginDB float64
+	ReferenceProbability    float64
+	FullProbabilityMarginDB float64
+	// CoverageThresholds are the probabilities of Station.Coverage contours.
+	CoverageThresholds []float64
 }
 
 // StationSet is the complete station configuration copied from one consistent
@@ -231,6 +293,8 @@ type Settings struct {
 	// Transmitter is Config.Transmitter, the profile every coverage estimate
 	// and reception assumes.
 	Transmitter TransmitterProfile
+	// Reception is the reception model.
+	Reception ReceptionModel
 }
 
 // SpeedLimits is the accepted running speed range and precision. Speed 0 is the

@@ -20,10 +20,23 @@ type Position struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// Channel is an AIS VHF data channel as written in the NMEA radio channel field.
+type Channel string
+
+// The two AIS channels.
+const (
+	ChannelA Channel = "A" // AIS 1, 161.975 MHz.
+	ChannelB Channel = "B" // AIS 2, 162.025 MHz.
+)
+
 // EncodePosition encodes AIS message type 1 with underway status, unavailable
-// rate of turn, and default radio state. It returns a checksummed NMEA line
-// including CRLF. MMSI must have nine digits and all navigation values be valid.
-func EncodePosition(p Position) (string, error) {
+// rate of turn, and default radio state, transmitted on channel. It returns a
+// checksummed NMEA line including CRLF. MMSI must have nine digits, all
+// navigation values be valid, and channel be A or B.
+func EncodePosition(p Position, channel Channel) (string, error) {
+	if channel != ChannelA && channel != ChannelB {
+		return "", fmt.Errorf("channel must be A or B: %q", channel)
+	}
 	if p.MMSI < 100000000 || p.MMSI > 999999999 {
 		return "", fmt.Errorf("MMSI must have nine digits: %d", p.MMSI)
 	}
@@ -73,7 +86,7 @@ func EncodePosition(p Position) (string, error) {
 			payload[i] += 8
 		}
 	}
-	body := "AIVDM,1,1,,A," + string(payload[:]) + ",0"
+	body := "AIVDM,1,1,," + string(channel) + "," + string(payload[:]) + ",0"
 	var checksum byte
 	for i := range len(body) {
 		checksum ^= body[i]

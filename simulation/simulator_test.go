@@ -309,10 +309,32 @@ func TestTicksKeepExistingMovement(t *testing.T) {
 	}
 	require.Equal(t, []string{
 		"1 200000000 2030-01-02T03:04:05Z !AIVDM,1,1,,A,12vg200P0w0B9jjMiLDPe0T:0000,0*1D\r\n",
-		"2 200000001 2030-01-02T03:04:05Z !AIVDM,1,1,,A,12vg20@P1n0B@wjMhDVo9Uf:0000,0*3E\r\n",
-		"3 200000000 2030-01-02T03:04:06Z !AIVDM,1,1,,A,12vg200P0w0B9k4MiLHhe0T<0000,0*70\r\n",
+		"2 200000001 2030-01-02T03:04:05Z !AIVDM,1,1,,B,12vg20@P1n0B@wjMhDVo9Uf:0000,0*3D\r\n",
+		"3 200000000 2030-01-02T03:04:06Z !AIVDM,1,1,,B,12vg200P0w0B9k4MiLHhe0T<0000,0*73\r\n",
 		"4 200000001 2030-01-02T03:04:06Z !AIVDM,1,1,,A,12vg20@P1n0B@wdMhDNo9Uf<0000,0*2E\r\n",
 	}, sentences)
+}
+
+func TestChannelsAlternatePerVessel(t *testing.T) {
+	for _, count := range []int{1, 2, 3} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			s := newSimulator(t, testConfig(5, count))
+			runSteps(t, s, advance(1500*time.Millisecond), setCount(count+1), advance(2500*time.Millisecond))
+
+			last := map[uint32]ais.Channel{}
+			for _, message := range s.History().Messages {
+				want := ais.ChannelA
+				if previous, seen := last[message.MMSI]; seen && previous == ais.ChannelA || !seen && message.MMSI%2 == 1 {
+					want = ais.ChannelB
+				}
+				requireValidNMEA(t, message.Sentence)
+				got := decode(t, message.Sentence).Channel
+				require.Equal(t, want, got, "sequence %d", message.Sequence)
+				last[message.MMSI] = got
+			}
+			require.Len(t, last, count+1)
+		})
+	}
 }
 
 func TestSpeedScalesElapsedTime(t *testing.T) {
@@ -667,6 +689,8 @@ func TestReadsReturnCopies(t *testing.T) {
 	metadata := s.Metadata()
 	metadata.VesselTypes[0].Name = "changed"
 	metadata.SupportedMessageTypes[0] = 99
+	metadata.Settings.Reception.CoverageThresholds[0] = 99
+	require.InDelta(t, 0.9, s.Metadata().Settings.Reception.CoverageThresholds[0], 0)
 
 	require.NotEqual(t, fleet, s.Fleet())
 	require.NotEqual(t, history, s.History())
@@ -691,6 +715,12 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 			Speed:       simulation.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
 			MaxStations: 16,
 			Transmitter: simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
+			Reception: simulation.ReceptionModel{
+				SiteLossDB: 15, PathExponent: 3.5, EffectiveEarthRadiusFactor: 4.0 / 3,
+				ChannelAFrequencyMHz: 161.975, ChannelBFrequencyMHz: 162.025, HorizonTaperStart: 0.8,
+				ZeroProbabilityMarginDB: -12, ReferenceProbability: 0.8, FullProbabilityMarginDB: 6,
+				CoverageThresholds: []float64{0.9, 0.5},
+			},
 		},
 	}, metadata)
 	require.Len(t, s.Fleet().Vessels, metadata.Settings.InitialVesselCount)

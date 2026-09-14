@@ -76,9 +76,20 @@ var vesselTypes = []VesselType{{ID: cargoTypeID, Name: "Cargo vessel"}}
 // in history until evicted.
 type vesselState struct {
 	ais.Position
-	name   string
-	typeID string
-	report Message
+	name    string
+	typeID  string
+	report  Message
+	reports uint64 // Reports emitted so far; selects the next channel.
+}
+
+// channel returns the channel of the vessel's next report. Channels alternate
+// per vessel, starting on A for an even MMSI and on B for an odd one, so every
+// vessel uses both channels whatever the fleet size.
+func (v *vesselState) channel() Channel {
+	if (uint64(v.MMSI)+v.reports)%2 == 0 {
+		return ChannelA
+	}
+	return ChannelB
 }
 
 // state is all mutable engine state except history. A mutation copies it,
@@ -139,7 +150,7 @@ func New(config Config) (*Simulator, error) {
 	if err := validateTransmitter(config.Transmitter); err != nil {
 		return nil, err
 	}
-	stations, err := newStations(config.Stations, start)
+	stations, err := newStations(config.Stations, start, config.Transmitter)
 	if err != nil {
 		return nil, err
 	}
@@ -196,11 +207,10 @@ func (s *Simulator) SetCount(count int) ([]Message, error) {
 				Speed:     minSpeedKnots + float64(random.IntN(speedSteps))/10,
 				Course:    course, Heading: int(course), UpdatedAt: now,
 			}, name: fmt.Sprintf("Vessel %d", mmsi-firstMMSI+1), typeID: cargoTypeID}
-			report, err := next.emit(vessel.Position)
+			report, err := next.emit(&vessel)
 			if err != nil {
 				return nil, err
 			}
-			vessel.report = report
 			next.vessels = append(next.vessels, vessel)
 			next.nextMMSI++
 			reports = append(reports, report)
@@ -312,11 +322,10 @@ func (s *Simulator) advance(ctx context.Context, next state, delta time.Duration
 		for i := range next.vessels {
 			vessel := &next.vessels[i]
 			move(&vessel.Position, at)
-			report, err := next.emit(vessel.Position)
+			report, err := next.emit(vessel)
 			if err != nil {
 				return nil, err
 			}
-			vessel.report = report
 			reports = append(reports, report)
 		}
 		next.updatedAt = at
@@ -328,14 +337,9 @@ func (s *Simulator) advance(ctx context.Context, next state, delta time.Duration
 
 // move advances p along a great circle at its fixed speed and course to at.
 func move(p *ais.Position, at time.Time) {
-	lat := p.Latitude * math.Pi / 180
-	lon := p.Longitude * math.Pi / 180
-	bearing := p.Course * math.Pi / 180
-	distance := p.Speed * 1852 * at.Sub(p.UpdatedAt).Hours() / 6371000
-	nextLat := math.Asin(math.Sin(lat)*math.Cos(distance) + math.Cos(lat)*math.Sin(distance)*math.Cos(bearing))
-	nextLon := lon + math.Atan2(math.Sin(bearing)*math.Sin(distance)*math.Cos(lat), math.Cos(distance)-math.Sin(lat)*math.Sin(nextLat))
-	p.Latitude = nextLat * 180 / math.Pi
-	p.Longitude = math.Mod(nextLon*180/math.Pi+540, 360) - 180
+	latitude, longitude := destination(p.Latitude, p.Longitude, p.Course, p.Speed*1852*at.Sub(p.UpdatedAt).Hours())
+	p.Latitude = latitude
+	p.Longitude = math.Mod(longitude+540, 360) - 180
 	p.UpdatedAt = at
 }
 
@@ -365,14 +369,17 @@ func (st *state) reserve(n uint64) error {
 	return nil
 }
 
-// emit encodes the report for p with the next staged sequence.
-func (st *state) emit(p ais.Position) (Message, error) {
-	sentence, err := ais.EncodePosition(p)
+// emit encodes the current position of v on its next channel with the next
+// staged sequence and makes it the vessel's latest report.
+func (st *state) emit(v *vesselState) (Message, error) {
+	sentence, err := ais.EncodePosition(v.Position, ais.Channel(v.channel()))
 	if err != nil {
-		return Message{}, fmt.Errorf("encode vessel %d: %w", p.MMSI, err)
+		return Message{}, fmt.Errorf("encode vessel %d: %w", v.MMSI, err)
 	}
 	st.sequence++
-	return Message{Sequence: st.sequence, MMSI: p.MMSI, Timestamp: p.UpdatedAt, Sentence: sentence}, nil
+	v.reports++
+	v.report = Message{Sequence: st.sequence, MMSI: v.MMSI, Timestamp: v.UpdatedAt, Sentence: sentence}
+	return v.report, nil
 }
 
 func checkCount(count int) error {
@@ -456,6 +463,15 @@ func (s *Simulator) Metadata() Metadata {
 			},
 			MaxStations: MaxStations,
 			Transmitter: s.transmitter,
+			Reception: ReceptionModel{
+				SiteLossDB: siteLossDB, PathExponent: pathExponent,
+				EffectiveEarthRadiusFactor: effectiveEarthRadiusFactor,
+				ChannelAFrequencyMHz:       channelAFrequencyMHz, ChannelBFrequencyMHz: channelBFrequencyMHz,
+				HorizonTaperStart:       horizonTaperStart,
+				ZeroProbabilityMarginDB: zeroProbabilityMarginDB, ReferenceProbability: referenceProbability,
+				FullProbabilityMarginDB: fullProbabilityMarginDB,
+				CoverageThresholds:      slices.Clone(coverageThresholds),
+			},
 		},
 	}
 }

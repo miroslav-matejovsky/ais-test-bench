@@ -42,8 +42,8 @@ func TestStationValidationRejectsInvalidDefinitions(t *testing.T) {
 		"blank name":                 func(d *simulation.StationDefinition) { d.Name = " \t" },
 		"invalid UTF-8 name":         func(d *simulation.StationDefinition) { d.Name = "\xff" },
 		"81 character name":          func(d *simulation.StationDefinition) { d.Name = strings.Repeat("é", 81) },
-		"latitude above 90":          func(d *simulation.StationDefinition) { d.Latitude = math.Nextafter(90, 91) },
-		"latitude below -90":         func(d *simulation.StationDefinition) { d.Latitude = -91 },
+		"latitude above 85":          func(d *simulation.StationDefinition) { d.Latitude = math.Nextafter(85, 86) },
+		"latitude below -85":         func(d *simulation.StationDefinition) { d.Latitude = math.Nextafter(-85, -86) },
 		"latitude not a number":      func(d *simulation.StationDefinition) { d.Latitude = math.NaN() },
 		"longitude above 180":        func(d *simulation.StationDefinition) { d.Longitude = math.Nextafter(180, 181) },
 		"longitude below -180":       func(d *simulation.StationDefinition) { d.Longitude = math.Nextafter(-180, -181) },
@@ -128,8 +128,8 @@ func TestStationValidationAcceptsBoundaries(t *testing.T) {
 		adjacent = append(adjacent, [2]float64{float64(i * 45), float64((i + 1) * 45 % 360)})
 	}
 	for name, change := range map[string]func(*simulation.StationDefinition){
-		"north pole":      func(d *simulation.StationDefinition) { d.Latitude = 90 },
-		"south pole":      func(d *simulation.StationDefinition) { d.Latitude = -90 },
+		"latitude 85":     func(d *simulation.StationDefinition) { d.Latitude = 85 },
+		"latitude -85":    func(d *simulation.StationDefinition) { d.Latitude = -85 },
 		"longitude -180":  func(d *simulation.StationDefinition) { d.Longitude = -180 },
 		"longitude 180":   func(d *simulation.StationDefinition) { d.Longitude = 180 },
 		"smallest height": func(d *simulation.StationDefinition) { d.AntennaHeightMeters = math.SmallestNonzeroFloat64 },
@@ -292,16 +292,19 @@ func TestStationRevisions(t *testing.T) {
 			definition := site("Site")
 			tt.change(&definition)
 
+			want := s.Stations()
 			stations, err := s.UpdateStation(1, "station-2", definition)
 			require.NoError(t, err)
-			wantRF := uint64(1)
+			want.Revision = 2
+			want.Stations[1].Definition = definition
+			want.Stations[1].ConfigRevision = 2
 			if tt.rf {
-				wantRF = 2
+				// Coverage is recomputed as if the station had been created edited.
+				config.Stations[1] = definition
+				want.Stations[1].RFRevision = 2
+				want.Stations[1].Coverage = newSimulator(t, config).Stations().Stations[1].Coverage
 			}
-			require.Equal(t, simulation.StationSet{SimulationID: runID, Revision: 2, Stations: []simulation.Station{
-				{ID: "station-1", Definition: site("Other"), ConfigRevision: 1, RFRevision: 1, CreatedAt: start},
-				{ID: "station-2", Definition: definition, ConfigRevision: 2, RFRevision: wantRF, CreatedAt: start},
-			}}, stations)
+			require.Equal(t, want, stations)
 
 			// Repeating the edit is a no-op, including for the set revision.
 			again, err := s.UpdateStation(2, "station-2", definition)
@@ -417,7 +420,7 @@ func TestMaximalStationFitsEncodedLimit(t *testing.T) {
 	channel := simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -124.12345678901234, NoisePenaltyDB: 39.123456789012345, DropProbability: long + 1}
 	definition := simulation.StationDefinition{
 		Name:     strings.Repeat("<", simulation.MaxStationNameRunes),
-		Latitude: -89.12345678901234, Longitude: -179.12345678901234, Enabled: true,
+		Latitude: -84.12345678901234, Longitude: -179.12345678901234, Enabled: true,
 		AntennaHeightMeters: 499.12345678901234, ReceiveGainDBi: -9.123456789012345, FeederLossDB: 29.123456789012345,
 		ChannelA: channel, ChannelB: channel,
 	}
@@ -430,7 +433,7 @@ func TestMaximalStationFitsEncodedLimit(t *testing.T) {
 	s := newSimulator(t, testConfig(1, 0))
 	_, stations, err := s.AddStation(1, definition)
 	require.NoError(t, err)
-	encoded, err := json.Marshal(stations.Stations[0])
+	encoded, err := json.Marshal(stations.Stations[0].Definition)
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(encoded), 4096)
 }
