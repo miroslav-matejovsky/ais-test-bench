@@ -75,7 +75,7 @@ The selected station panel includes:
 | Identity and state | Name, ID, location, enabled/degraded state, config and RF revision. |
 | Site capability | Antenna height above sea level, gain dBi, feeder loss dB, shadow-sector bearings/losses. |
 | Channel capability | A/B frequencies, enabled state, sensitivity dBm, noise penalty dB, extra packet-drop probability. |
-| Coverage assumptions | Model version, reference transmitter, threshold legend, min/max contour range in nautical miles and km. |
+| Coverage assumptions | Published model parameters, reference transmitter, threshold legend, min/max contour range in nautical miles and km. |
 | Reception summary | Counts since creation, 60-second virtual window and actual duration, per-channel successes, simulated opportunity ratio, outcome reasons. |
 | Observed targets | MMSI, scenario name, last received time, virtual age/status, last channel/power, received position/speed/course/heading. |
 | Recent messages | Bounded recent successful receptions and access to the station history inspector. |
@@ -159,3 +159,42 @@ contracts. Add small automated frontend checks only if supported by existing too
 - Filters and map controls perform no simulation writes.
 - Stale network data, stale AIS targets, no receivers, and no receptions have
   separate understandable states.
+
+## Implementation record
+
+Implemented in the embedded display template, `display.js`, and shared CSS.
+The display remains a read-only consumer of its same-origin API; the engine
+continues to own coverage geometry and reception decisions.
+
+- All/single/multiple station selection, separate A/B coverage, layer controls,
+  stable station colors, first-load framing, and explicit coverage fitting.
+- Keyed comparison, target, provenance, and reception tables; station and target
+  panels; original NMEA copying; nullable AIS fields labelled unavailable.
+- Station history has an independent cursor and a 200-row bound plus one pinned
+  message. Gaps retain current targets. Pause, removal, 409, new runs, and delayed
+  replies preserve the appropriate identity boundaries.
+- Main polling is serialized and waits one second after completion. Failed reads
+  retain the complete previous view. Leaflet and tile failures leave tables usable.
+- Standalone display links to its configured simulator's manager. No component
+  shares simulation state or performs browser-side RF calculations.
+
+The existing snapshot publishes per-station combined current and lost counts.
+Fresh/stale splits and last-seen timestamps are derived only for selected sites
+from retained observations, with this scope labelled beside the comparison.
+Unselected sites show combined current totals and an unavailable last seen.
+This avoids inventing missing lifetime timestamps or making extra upstream reads.
+The model has published parameters rather than a version, consistent with the
+proof-of-concept decision recorded in this plan's README. Optional target-to-site
+lines are omitted; the provenance table identifies chosen and older transmissions.
+
+Repeatable browser verification is in
+`internal/ui/testdata/display-browser.mjs`, with invocation and evidence capture
+in the adjacent README. It exercises deterministic received-data fixtures while
+using the real embedded page, DOM, and Leaflet. Handler tests cover required
+controls and combined/standalone manager links.
+
+Verification on 2026-09-14: the browser checklist passed, including clipboard
+CRLF preservation, delayed history and selection responses, paused virtual time,
+restart with an explicit selection, and map dependency failures. Five screenshots
+were captured using `AIS_BROWSER_EVIDENCE`. `task all` passed with 594 tests,
+formatting, vet, dead-code, architecture, and lint checks.

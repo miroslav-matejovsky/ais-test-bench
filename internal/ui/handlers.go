@@ -18,7 +18,7 @@ type Link struct {
 
 // Pages renders the HTML pages. It holds rendering state only: page scripts
 // fetch their data from JSON APIs. Each component mounts the pages it serves
-// and supplies navigation for exactly those pages.
+// and supplies local page links and any explicit external navigation.
 type Pages struct {
 	logger  *slog.Logger
 	html    *renderer
@@ -53,8 +53,8 @@ func (p *Pages) Manager(w http.ResponseWriter, r *http.Request) {
 	p.render(w, r, nil, "base", "pages/manager.tmpl")
 }
 
-// Display renders the live map. Its script polls /display/api/vessels on the
-// same origin.
+// Display renders the live map of received targets. Its script polls
+// /display/api/observations on the same origin.
 func (p *Pages) Display(w http.ResponseWriter, r *http.Request) {
 	p.render(w, r, nil, "base", "pages/display.tmpl")
 }

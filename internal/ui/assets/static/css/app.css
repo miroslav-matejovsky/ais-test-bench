@@ -41,7 +41,7 @@ input[type="number"] { width: 6rem; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; }
 pre { padding: 1rem; background: #f1f5f7; overflow-x: auto; min-height: 5rem; }
-.vessel-details { white-space: pre-line; }
+.target-details { white-space: pre-line; }
 .presets { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .clock { font-weight: 600; font-variant-numeric: tabular-nums; }
 .clock.stale { color: #8a4b00; }
@@ -60,3 +60,33 @@ td button { margin: 0.2rem; }
 .field-error { color: #a02020; white-space: pre-line; }
 [aria-invalid="true"] { outline: 2px solid #a02020; }
 summary { cursor: pointer; padding: 0.75rem 0; }
+
+/* Display tables remain usable when map resources or observation reads fail. */
+body:has(#display-view) { max-width: 100rem; }
+#display-view { min-width: 0; }
+#display-view fieldset { min-width: 0; }
+#station-selection { display: inline-flex; flex-wrap: wrap; gap: 0.5rem; }
+#station-selection label { border-left: 4px solid; padding: 0.3rem; }
+#display-view select, #display-view textarea { font: inherit; padding: 0.4rem; max-width: 100%; }
+#display-view input[type="search"] { max-width: 100%; box-sizing: border-box; }
+#display-view button[aria-pressed="true"] { background: #154f78; color: white; }
+.display-controls { margin: 1rem 0; }
+.display-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr); gap: 1rem; }
+#observation-details { min-width: 0; max-height: 65vh; overflow: auto; border: 1px solid #a8bcc7; padding: 0 0.75rem; }
+#display-view pre { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 0; }
+#raw-nmea { display: block; width: 100%; box-sizing: border-box; font-family: monospace; }
+#display-view.stale { border-left: 5px solid #9b5100; padding-left: 0.75rem; }
+#display-view.stale #map { filter: grayscale(0.7); }
+#display-view.stale #live-status, #selection-notice { color: #854200; font-weight: 600; }
+#display-view.pending #live-status::after { content: " Loading a new selection; displayed data is from the previous selection."; }
+.station-map-label { display: block; width: max-content; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: white; color: #172c3c; border: 3px solid; padding: 3px 6px; font-weight: 600; }
+.inspector-scroll { max-height: 25rem; }
+#display-view th { background: #f1f5f7; }
+#display-view button:focus-visible, #display-view input:focus-visible, #display-view select:focus-visible, #display-view textarea:focus-visible { outline: 3px solid #145da0; outline-offset: 2px; }
+@media (max-width: 760px) {
+    .display-layout { grid-template-columns: minmax(0, 1fr); }
+    #observation-details { max-height: none; }
+    #map { height: 50vh; min-height: 18rem; }
+    header { flex-wrap: wrap; gap: 0.5rem; }
+    nav { flex-wrap: wrap; }
+}

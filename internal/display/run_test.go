@@ -28,11 +28,13 @@ func TestStandaloneRoutes(t *testing.T) {
 		contains    []string
 		notContains []string
 	}{
-		{method: http.MethodGet, path: "/display", wantStatus: http.StatusOK, contains: []string{"<h1>Display</h1>", `<a href="/display">Display</a>`, "/static/js/display.js"}, notContains: []string{`href="/manager"`}},
-		{method: http.MethodGet, path: "/display/api/vessels", wantStatus: http.StatusOK, contains: []string{`"simulationId":"run-1"`}},
-		{method: http.MethodGet, path: "/static/js/display.js", wantStatus: http.StatusOK, contains: []string{"/display/api/vessels"}},
+		{method: http.MethodGet, path: "/display", wantStatus: http.StatusOK, contains: []string{"<h1>Display</h1>", `<a href="/display">Display</a>`, "/static/js/display.js", `href="` + u.server.URL + `/manager">Open manager</a>`}, notContains: []string{`href="/manager"`}},
+		{method: http.MethodGet, path: "/display/api/observations?stations=all", wantStatus: http.StatusOK, contains: []string{`"simulationId":"run-1"`, `"targets":[{`}},
+		{method: http.MethodGet, path: "/display/api/stations/s1/receptions?simulationId=run-1", wantStatus: http.StatusOK, contains: []string{`"stationId":"s1"`}},
+		{method: http.MethodGet, path: "/static/js/display.js", wantStatus: http.StatusOK, contains: []string{"/display/api/observations"}, notContains: []string{"/display/api/vessels"}},
 		{method: http.MethodGet, path: "/", wantStatus: http.StatusFound},
-		{method: http.MethodPost, path: "/display/api/vessels", wantStatus: http.StatusMethodNotAllowed},
+		{method: http.MethodPost, path: "/display/api/observations", wantStatus: http.StatusMethodNotAllowed},
+		{method: http.MethodGet, path: "/display/api/vessels", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/manager", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/api/vessels", wantStatus: http.StatusNotFound},
 		{method: http.MethodPut, path: "/api/vessels", wantStatus: http.StatusNotFound},
@@ -51,7 +53,7 @@ func TestStandaloneRoutes(t *testing.T) {
 			}
 		})
 	}
-	require.Equal(t, []string{"/api/metadata", "/api/vessels"}, u.requestedPaths(), "only the display API reads the simulator")
+	require.Equal(t, []string{"/api/observations?stations=all", "/api/stations/s1/receptions?simulationId=run-1"}, u.requested(), "only the display API reads the simulator")
 }
 
 func TestRunServesPageWithoutSimulator(t *testing.T) {
@@ -72,7 +74,7 @@ func TestRunServesPageWithoutSimulator(t *testing.T) {
 	status, body := request(t, base+"/")
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "<h1>Display</h1>")
-	status, body = request(t, base+"/display/api/vessels")
+	status, body = request(t, base+"/display/api/observations")
 	require.Equal(t, http.StatusServiceUnavailable, status)
 	require.Contains(t, body, "simulator unavailable")
 

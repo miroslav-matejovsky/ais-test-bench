@@ -50,7 +50,8 @@ origin without user info, path, query, or fragment. Each process serves
 `/static/*` for its pages.
 
 The display uses Leaflet 1.9.4 and OpenStreetMap tiles. The browser needs internet
-access to load Leaflet and map tiles. Application templates, CSS, JavaScript, and
+access to load Leaflet and map tiles; observation tables still work if either
+cannot load. Application templates, CSS, JavaScript, and
 htmx are embedded in the executables. No Node build is required.
 
 ```text
@@ -65,8 +66,8 @@ the Go tools. Dependencies are vendored.
 
 The simulator component owns vessel movement, AIS generation, authoritative
 state, recent message storage, its HTTP API, and the manager page. The display
-component owns its HTTP backend, a simulator HTTP client, AIS decoding for the
-map, and the live page. Browsers call only the origin that served their page;
+component owns its HTTP backend, a simulator HTTP client, validation and AIS
+decoding of received observations, and the live page. Browsers call only the origin that served their page;
 the display backend reads the simulator server-side.
 
 ```mermaid
@@ -77,7 +78,7 @@ flowchart LR
     Driver --> Engine[Public simulation engine]
     GoPrograms[Other Go programs] --> Engine
     DisplayBrowser[Display browser] --> Display[Display backend]
-    Display -- HTTP /api/vessels and /api/metadata --> Simulator
+    Display -- HTTP /api/observations and station receptions --> Simulator
 ```
 
 Both applications and other Go programs use the same engine implementation. In
@@ -267,25 +268,54 @@ request examples, field units, selection, retention, and lifecycle rules.
 
 ## Display API
 
-The display currently consumes the complete generated fleet. Reception-based
-display filtering, station coverage, and signal inspectors are the next plan steps;
-the new station and observation APIs are available now to HTTP clients and the manager.
+The display shows only AIS targets that base stations actually received. A vessel
+no station hears is not drawn, and a missed report leaves the last received
+position. The page shows fresh targets, mutes stale ones, and hides lost ones
+unless the lost-target layer is enabled. Choose one or several stations to see
+their received-target union. The map shows each site's estimated 90% and 50%
+coverage for channel A or B, with separate station and coverage layer controls.
+Initial framing includes stations and received positions; "Fit coverage" frames
+the larger RF area. Later polls preserve the map view.
 
-`GET /display/api/vessels` returns `{ "simulationId": "...", "updatedAt": "...",
-"time": { "now": "...", "elapsedMs": 1400, "speed": 1, "paused": false },
-"spawnBounds": { "south": 52, "north": 52.04, "west": 3.94, "east": 4 },
-"vessels": [...] }`. `time` is the validated simulator metadata clock. A vessel
-has `mmsi`, `name`, `typeId`, `typeName`, `latitude`, `longitude`, `speed`
-(knots), `course` and `heading` (degrees), and `updatedAt` (virtual UTC report
-time). Navigation values are decoded from the latest NMEA
-report and are `null` when AIS marks them unavailable.
+Station comparison and detail panels show receiver settings, coverage assumptions,
+and simulation diagnostic counters. Fresh/stale splits and last-seen timestamps
+come from retained observations of selected sites; unselected sites show their
+combined current count. Target details show AIS navigation and receiver provenance;
+choosing an older receiver report fetches that station's last received position.
 
-Each request reads the simulator fleet and metadata concurrently with a
-five-second deadline. An unreachable simulator, a timeout, or a restart between
-the two reads returns 503. Invalid simulator JSON, metadata, time, or AIS returns
-502. The page then keeps its last markers and clock, marks them stale, shows that
-updates are unavailable, and retries. A new `simulationId` clears the map before
-the new fleet is drawn.
+The signal inspector shows the recent selection sample or one station's paged
+history. It retains at most 200 rows plus the message explicitly opened for reading.
+MMSI filtering applies to this loaded sample. History gaps show retained sequence
+bounds; pausing the inspector leaves main observation polling active. Message
+details retain reception-time receiver settings and copy the exact checksummed
+NMEA, including CRLF. The standalone page links to its configured simulator manager.
+
+| Method | Path | Response |
+| --- | --- | --- |
+| GET | `/display/api/observations?stations=all` | Validated snapshot: clock, settings, stations with coverage and counters, decoded targets with provenance, recent receptions; accepts distinct station IDs |
+| GET | `/display/api/stations/{id}/receptions?simulationId=...` | Validated, decoded station history page; optional `after` cursor and `limit` of 1-200 |
+
+A target is `{ "mmsi": ..., "ageMs": ..., "status": "fresh", "report": {...},
+"stations": [...] }`. The report is the chosen reception: `stationId`, decimal
+string `sequence` and `transmissionSequence`, `channel`, `receivedAt`, raw
+`sentence`, `navigation` (`latitude`, `longitude`, `speed` in knots, `course`,
+`heading`, `utcSecond`; `null` when unavailable), `scenario` labels, the
+reception-time `receiver` configuration, and the estimated `signal` with
+`estimatedPowerDbm`. Provenance marks which stations received the chosen
+transmission. Scenario names and categories are simulator labels, not AIS data.
+
+Each request performs one simulator read with a five-second deadline and bounds
+the body to 8 MiB for observations and 2 MiB for history. It validates the whole
+contract before answering: identities, clock, revisions, canonical decimal
+strings, station configuration, counters, coverage geometry, references, ages,
+and NMEA framing, checksum, type, channel, MMSI, and UTC second. Malformed display
+queries return 400, an unknown station 404, and a history request from another
+run 409. An unreachable simulator or a timeout returns 503; any invalid simulator
+response returns 502. The page then keeps its last complete view, marks the entire
+view stale, shows that updates are unavailable, and retries. A new `simulationId`
+clears markers, selections, details, and history cursors before drawing the new run.
+See `internal/display` package
+documentation for the full validation rules.
 
 Movement follows the current speed and course over the earth's surface. Random
 starting positions are offshore; this first scenario has no coastline avoidance.

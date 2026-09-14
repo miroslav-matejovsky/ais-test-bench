@@ -7,6 +7,9 @@ complexity: "medium"
 
 # HTTP-only display observation projection
 
+Status: implemented. The display backend and its page read only received
+observations over HTTP. Station, coverage, and inspector presentation remain in step 06.
+
 ## Outcome
 
 The display backend reads station observations from the simulator, validates the
@@ -103,3 +106,27 @@ Check combined and standalone composition with the same fixture contract.
 - One bad upstream snapshot preserves the browser's previous complete view.
 - Shared types remain data-only; display never imports simulation or simulator.
 - HTTP observations support both process arrangements without behavior differences.
+
+## Implementation and verification record
+
+- `/display/api/vessels`, `Client.Fleet`, and the fleet types are removed. The page
+  polls `/display/api/observations?stations=all`, draws only received targets with
+  a position, mutes stale targets, hides lost ones, and keeps its last view on 502/503.
+- `Client.Observations` and `Client.ReceptionHistory` perform one bounded read each
+  (8 MiB / 2 MiB, five-second deadline). Simulator 400/404/409 API errors keep their
+  status; other statuses and contract violations return 502; transport failures 503.
+- `validate.go` checks settings, clock, station definitions, counter partitions,
+  history bounds, and coverage geometry. `project.go` checks references, ages,
+  provenance, transmission and reception identity consistency, and decodes each
+  distinct sentence once. A token scan rejects noncanonical decimal uint64 strings,
+  which `encoding/json` alone accepts with leading zeros.
+- Scenario categories missing from the catalogue are appended with their ID as name,
+  so history pages, which carry no catalogue, use the same labels.
+- No model version exists in the wire contract and coverage carries no revision of
+  its own; validation checks station RF revisions and contour shape instead.
+- Detail and history presentation, including identity/selection checks of
+  concurrent responses, is implemented in step 06.
+- `httptest` fixtures derive snapshots and history pages from one consistent
+  scenario and fail on any other route. `task all` passed with 594 tests. A smoke run
+  of the combined binary at 100 vessels and 100x returned 25 of 25 valid snapshots
+  (267 KB), a truncated history tail, a gap page, and a paused station selection.

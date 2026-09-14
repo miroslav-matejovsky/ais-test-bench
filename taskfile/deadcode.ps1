@@ -14,7 +14,6 @@
 #    and the alternative (dropping it) means dropping the assertion it enables.
 $allow = @(
     'Simulator.Advance'
-
 )
 
 $out = deadcode ./cmd/... 2>&1

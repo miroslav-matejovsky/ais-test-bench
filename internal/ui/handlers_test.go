@@ -55,6 +55,11 @@ func TestPages(t *testing.T) {
 			contains: []string{
 				"<title>Display", "<h1>Display</h1>", `id="map"`, "leaflet@1.9.4", "/static/js/display.js",
 				`id="sim-clock"`, `id="live-status" role="status"`,
+				`id="station-selection"`, `id="coverage-channel"`, `id="show-lost"`,
+				`id="station-comparison"`, `id="target-body"`, `id="provenance-body"`,
+				`id="history-station"`, `id="pause-history"`, `id="message-body"`,
+				`id="raw-nmea" readonly`, `id="copy-nmea"`, `id="empty-stations" hidden`,
+				`href="/manager">Open manager</a>`,
 			},
 		},
 		{

@@ -152,9 +152,12 @@ func TestDisplayReadsPrivateListener(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.Zero(t, internal.accepts.Load(), "public API requests do not use the private listener")
 
-	status, body := get(t, base+"/display/api/vessels")
+	status, body := get(t, base+"/display/api/observations")
 	require.Equal(t, http.StatusOK, status, body)
 	require.Positive(t, internal.accepts.Load(), "display client reads the private listener")
+
+	status, body = get(t, base+"/display/api/stations/unknown/receptions?simulationId=x")
+	require.Equal(t, http.StatusConflict, status, body)
 
 	status, _ = get(t, "http://"+internal.Addr().String()+"/manager")
 	require.Equal(t, http.StatusNotFound, status, "private listener serves API routes only")
@@ -174,7 +177,7 @@ func TestShutdownDrainsInFlightDisplayRequest(t *testing.T) {
 	}
 	response := make(chan result, 1)
 	go func() {
-		status, body := get(t, "http://"+public.Addr().String()+"/display/api/vessels")
+		status, body := get(t, "http://"+public.Addr().String()+"/display/api/observations")
 		response <- result{status, body}
 	}()
 	<-internal.accepted // The display request waits on its simulator read.
@@ -185,7 +188,7 @@ func TestShutdownDrainsInFlightDisplayRequest(t *testing.T) {
 
 	got := <-response
 	require.Equal(t, http.StatusOK, got.status, got.body)
-	require.Contains(t, got.body, `"vessels":[{`)
+	require.Contains(t, got.body, `"stations":[{`)
 	require.NoError(t, wait())
 }
 

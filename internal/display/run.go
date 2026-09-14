@@ -19,7 +19,10 @@ import (
 //	GET /static/       embedded static files
 //	    /display/api/  display API, see NewAPI
 func NewHandler(logger *slog.Logger, client *Client) (http.Handler, error) {
-	pages, err := ui.NewPages(logger, []ui.Link{{Href: "/display", Label: "Display"}})
+	pages, err := ui.NewPages(logger, []ui.Link{
+		{Href: "/display", Label: "Display"},
+		{Href: client.Origin() + "/manager", Label: "Simulator manager"},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create pages: %w", err)
 	}

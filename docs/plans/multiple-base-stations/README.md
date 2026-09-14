@@ -1,8 +1,9 @@
 # Multiple AIS base stations
 
 Status: in progress. Prepared 2026-09-14. Steps 01 (station configuration), 02
-(reception and coverage model), 03 (engine observations), and 04 (simulator API
-and manager controls) are implemented; steps 05-07 are future work.
+(reception and coverage model), 03 (engine observations), 04 (simulator API
+and manager controls), 05 (display backend), and 06 (display interface) are
+implemented; step 07 is future work.
 The "Current implementation" section describes the code before step 01. As a
 proof of concept, the model has no version: it is replaced in place when it
 changes, and its parameters are fixed engine constants published in metadata.

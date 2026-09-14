@@ -263,7 +263,7 @@ func TestStandaloneRoutes(t *testing.T) {
 		{method: http.MethodGet, path: "/status", wantStatus: http.StatusOK, contains: []string{"Uptime:"}},
 		{method: http.MethodGet, path: "/static/js/manager.js", wantStatus: http.StatusOK},
 		{method: http.MethodGet, path: "/display", wantStatus: http.StatusNotFound},
-		{method: http.MethodGet, path: "/display/api/vessels", wantStatus: http.StatusNotFound},
+		{method: http.MethodGet, path: "/display/api/observations", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/api/unknown", wantStatus: http.StatusNotFound},
 		{method: http.MethodPost, path: "/api/vessels", wantStatus: http.StatusMethodNotAllowed},
 		{method: http.MethodDelete, path: "/api/messages", wantStatus: http.StatusMethodNotAllowed},
