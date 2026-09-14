@@ -96,6 +96,14 @@ func (s *Simulator) Stations() StationSet {
 	return s.stationSet()
 }
 
+// StationConfiguration returns station definitions, clock, and settings from
+// one committed state. It does not settle time or expose mutable engine storage.
+func (s *Simulator) StationConfiguration() StationConfiguration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return StationConfiguration{StationSet: s.stationSet(), Metadata: s.metadata(), StateRevision: s.state.revision}
+}
+
 // AddStation adds a station at the current virtual instant and returns its new
 // ID with the resulting configuration. The station gets revision 1 for both
 // config and RF and zero counters. It receives only later reports, draws no

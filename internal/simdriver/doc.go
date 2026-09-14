@@ -39,7 +39,13 @@
 // delivered chunks. AddStation, UpdateStation, and RemoveStation follow the same
 // order: an invalid definition, a stale station set revision, or an unknown
 // station returns before settling; then the edit applies at the settled virtual
-// instant. Fleet, History, Metadata, and Stations return committed engine copies
+// instant. Station commands also check the expected simulation identity, reject
+// cancellation even while paused, and return the complete post-command station
+// configuration, clock, and settings while still holding the driver lock.
+// Adding beyond MaxStations returns ErrInvalid before settlement. Stations returns
+// a StationConfiguration; Observations and ReceptionHistory expose the engine's
+// finite receiving state. History rejects a previous run's cursor.
+// Fleet, History, Metadata, and Stations return committed engine copies
 // without settling, so metadata can trail pacing by one heartbeat plus
 // processing time.
 //

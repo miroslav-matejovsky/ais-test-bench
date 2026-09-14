@@ -55,6 +55,10 @@ func metadataResponse(metadata simulation.Metadata) simulatorapi.Metadata {
 		VesselTypes:           types,
 		SupportedMessageTypes: append([]int{}, metadata.SupportedMessageTypes...),
 		Settings: simulatorapi.Settings{
+			MaxStations:         settings.MaxStations,
+			Transmitter:         simulatorapi.TransmitterProfile(settings.Transmitter),
+			Reception:           simulatorapi.ReceptionModel(settings.Reception),
+			Observation:         simulatorapi.ObservationSettings(settings.Observation),
 			InitialVesselCount:  settings.InitialVesselCount,
 			MaxVessels:          settings.MaxVessels,
 			TickIntervalMs:      settings.TickIntervalMs,

@@ -169,75 +169,86 @@ func (d *Driver) SetSpeed(ctx context.Context, speed float64) error {
 	return nil
 }
 
-// AddStation validates definition and checks expectedRevision, settles elapsed
+// AddStation validates definition and checks simulationID and expectedRevision, settles elapsed
 // real time, and adds the station at the settled virtual instant. It returns the
 // new ID and the resulting configuration. Invalid definitions wrap
-// simulation.ErrInvalid and a stale revision wraps simulation.ErrConflict; both
+// simulation.ErrInvalid and a stale run/revision wraps simulation.ErrConflict; both
 // return before settling and change nothing. Other errors are those of
-// simulation.Simulator.AddStation. A settlement failure keeps delivered chunks.
-func (d *Driver) AddStation(ctx context.Context, expectedRevision uint64, definition simulation.StationDefinition) (string, simulation.StationSet, error) {
+// simulation.Simulator.AddStation, except a full set wraps ErrInvalid before
+// settlement. The returned clock/settings are captured with the new configuration
+// before releasing the command lock. A settlement failure keeps delivered chunks.
+func (d *Driver) AddStation(ctx context.Context, simulationID string, expectedRevision uint64, definition simulation.StationDefinition) (string, simulation.StationConfiguration, error) {
 	if err := simulation.ValidateStation(definition); err != nil {
-		return "", simulation.StationSet{}, err
+		return "", simulation.StationConfiguration{}, err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if err := d.prepareStationEdit(ctx, expectedRevision, ""); err != nil {
-		return "", simulation.StationSet{}, err
+	if err := d.prepareStationEdit(ctx, simulationID, expectedRevision, ""); err != nil {
+		return "", simulation.StationConfiguration{}, err
 	}
-	id, stations, err := d.sim.AddStation(expectedRevision, definition)
+	id, _, err := d.sim.AddStation(expectedRevision, definition)
 	if err != nil {
-		return "", simulation.StationSet{}, fmt.Errorf("add station: %w", err)
+		return "", simulation.StationConfiguration{}, fmt.Errorf("add station: %w", err)
 	}
-	return id, stations, nil
+	return id, d.sim.StationConfiguration(), nil
 }
 
 // UpdateStation is AddStation for an edit of station id. An unknown id wraps
 // simulation.ErrNotFound and also returns before settling.
-func (d *Driver) UpdateStation(ctx context.Context, expectedRevision uint64, id string, definition simulation.StationDefinition) (simulation.StationSet, error) {
+func (d *Driver) UpdateStation(ctx context.Context, simulationID string, expectedRevision uint64, id string, definition simulation.StationDefinition) (simulation.StationConfiguration, error) {
 	if err := simulation.ValidateStation(definition); err != nil {
-		return simulation.StationSet{}, err
+		return simulation.StationConfiguration{}, err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if err := d.prepareStationEdit(ctx, expectedRevision, id); err != nil {
-		return simulation.StationSet{}, err
+	if err := d.prepareStationEdit(ctx, simulationID, expectedRevision, id); err != nil {
+		return simulation.StationConfiguration{}, err
 	}
-	stations, err := d.sim.UpdateStation(expectedRevision, id, definition)
+	_, err := d.sim.UpdateStation(expectedRevision, id, definition)
 	if err != nil {
-		return simulation.StationSet{}, fmt.Errorf("update station: %w", err)
+		return simulation.StationConfiguration{}, fmt.Errorf("update station: %w", err)
 	}
-	return stations, nil
+	return d.sim.StationConfiguration(), nil
 }
 
 // RemoveStation is UpdateStation for the removal of station id.
-func (d *Driver) RemoveStation(ctx context.Context, expectedRevision uint64, id string) (simulation.StationSet, error) {
+func (d *Driver) RemoveStation(ctx context.Context, simulationID string, expectedRevision uint64, id string) (simulation.StationConfiguration, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if err := d.prepareStationEdit(ctx, expectedRevision, id); err != nil {
-		return simulation.StationSet{}, err
+	if err := d.prepareStationEdit(ctx, simulationID, expectedRevision, id); err != nil {
+		return simulation.StationConfiguration{}, err
 	}
-	stations, err := d.sim.RemoveStation(expectedRevision, id)
+	_, err := d.sim.RemoveStation(expectedRevision, id)
 	if err != nil {
-		return simulation.StationSet{}, fmt.Errorf("remove station: %w", err)
+		return simulation.StationConfiguration{}, fmt.Errorf("remove station: %w", err)
 	}
-	return stations, nil
+	return d.sim.StationConfiguration(), nil
 }
 
 // prepareStationEdit rejects a stale revision and, for a nonempty id, an unknown
 // station, then settles. The driver is the only mutator, so the checks stay
 // valid while d.mu is held. Called with d.mu held.
-func (d *Driver) prepareStationEdit(ctx context.Context, expectedRevision uint64, id string) error {
+func (d *Driver) prepareStationEdit(ctx context.Context, simulationID string, expectedRevision uint64, id string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("station edit: %w", err)
+	}
 	current := d.sim.Stations()
+	if current.SimulationID != simulationID {
+		return fmt.Errorf("%w: simulation identity changed", simulation.ErrConflict)
+	}
 	if current.Revision != expectedRevision {
 		return fmt.Errorf("%w: station set revision is %d, not %d", simulation.ErrConflict, current.Revision, expectedRevision)
 	}
 	if id != "" && !slices.ContainsFunc(current.Stations, func(s simulation.Station) bool { return s.ID == id }) {
 		return fmt.Errorf("%w: station %q", simulation.ErrNotFound, id)
 	}
+	if id == "" && len(current.Stations) >= simulation.MaxStations {
+		return fmt.Errorf("%w: at most %d stations", simulation.ErrInvalid, simulation.MaxStations)
+	}
 	if err := d.settleLocked(ctx); err != nil {
 		return fmt.Errorf("settle before station change: %w", err)
 	}
-	return nil
+	return ctx.Err()
 }
 
 // settle delivers elapsed real time under the driver lock.
@@ -287,14 +298,28 @@ func (d *Driver) History() simulation.History {
 	return d.sim.History()
 }
 
-// Stations returns a copy of the station configuration without settling elapsed
-// time.
-func (d *Driver) Stations() simulation.StationSet {
-	return d.sim.Stations()
+// Stations returns station configuration, clock, and settings from one committed
+// engine state without settling elapsed time.
+func (d *Driver) Stations() simulation.StationConfiguration {
+	return d.sim.StationConfiguration()
 }
 
 // Metadata returns the run identity, committed clock, catalogs, and effective
 // settings without settling elapsed time.
 func (d *Driver) Metadata() simulation.Metadata {
 	return d.sim.Metadata()
+}
+
+// Observations returns one committed received-traffic snapshot without settling.
+func (d *Driver) Observations(stationIDs []string) (simulation.Observations, error) {
+	return d.sim.Observations(stationIDs)
+}
+
+// ReceptionHistory returns a finite page for this run. A previous run's cursor
+// is rejected before looking up station IDs, which are only unique within a run.
+func (d *Driver) ReceptionHistory(simulationID, stationID string, after *uint64, limit int) (simulation.ReceptionPage, error) {
+	if d.sim.Metadata().SimulationID != simulationID {
+		return simulation.ReceptionPage{}, fmt.Errorf("%w: simulation identity changed", simulation.ErrConflict)
+	}
+	return d.sim.ReceptionHistory(stationID, after, limit)
 }

@@ -150,6 +150,13 @@ func TestMetadataAPI(t *testing.T) {
 		"vesselTypes": [{"id": "cargo", "name": "Cargo vessel"}],
 		"supportedMessageTypes": [1],
 		"settings": {
+			"maxStations": 16,
+			"transmitter": {"powerWatts":12.5,"heightMeters":10,"gainDbi":2,"feederLossDb":1},
+			"reception": {"siteLossDb":15,"pathExponent":3.5,"effectiveEarthRadiusFactor":1.3333333333333333,
+				"channelAFrequencyMhz":161.975,"channelBFrequencyMhz":162.025,"horizonTaperStart":0.8,
+				"zeroProbabilityMarginDb":-12,"referenceProbability":0.8,"fullProbabilityMarginDb":6,"coverageThresholds":[0.9,0.5]},
+			"observation": {"receptionHistoryLimit":1000,"targetLimit":1000,"recentReceptionLimit":50,
+				"freshAgeMs":10000,"staleAgeMs":60000,"expiryAgeMs":600000,"rateWindowMs":60000},
 			"initialVesselCount": 1, "maxVessels": 100, "tickIntervalMs": 1000, "messageIntervalMs": 1000,
 			"pacingIntervalMs": 100, "messageHistoryLimit": 1000,
 			"speedKnots": {"min": 6, "max": 15.9},

@@ -21,6 +21,12 @@ simulation speed and to inspect recent messages. Open
 simulation, including changes made in other browser tabs. Both show the virtual
 UTC simulation time and speed separately from when the page last received data.
 
+The manager also creates, edits, disables, and deletes up to 16 AIS receiving
+stations. Three synthetic sites start with different antenna heights, sensitivities,
+and coverage. Expand the station editor to configure A/B channels and directional
+shadow losses. The "Disable B preset" applies a channel failure through the same
+station API. Concurrent edits preserve your draft and require review before retrying.
+
 The components also run as separate processes. Use two terminals:
 
 ```text
@@ -204,6 +210,12 @@ Any HTTP client can poll the simulator. JSON responses use `Cache-Control: no-st
 | GET | `/api/messages` | `{ "simulationId": "...", "messageLimit": 1000, "oldestSequence": 1, "latestSequence": 1, "messages": [...] }` |
 | GET | `/api/metadata` | Run identity, virtual start and `time`, vessel type catalog, supported AIS message types, effective settings |
 | PUT | `/api/time` | Accepts `{ "speed": 2 }`; returns the resulting metadata |
+| GET | `/api/stations` | Atomic station configuration, clock, settings, and revisions |
+| POST | `/api/stations` | Complete definition plus expected `simulationId` and `stationSetRevision`; returns 201 with `stationId` and resulting configuration |
+| PUT | `/api/stations/{id}` | Replace definition using expected run and station-set revision |
+| DELETE | `/api/stations/{id}` | Expected `simulationId` and `stationSetRevision` query parameters; returns resulting configuration |
+| GET | `/api/observations?stations=all` | Atomic received targets, station capabilities/coverage/counters, and newest 50 receptions; accepts a union of station IDs |
+| GET | `/api/stations/{id}/receptions?simulationId=...` | Newest 100 successful receptions; optional `after` cursor and `limit` of 1-200 |
 
 ```text
 curl http://localhost:8000/api/metadata
@@ -232,7 +244,32 @@ returns 400; other content types return 415; other methods return 405; a valid
 change the simulator cannot apply returns 500. An empty fleet is an empty JSON
 array.
 
+Station writes require every definition field, including zero/false values and
+empty `shadowSectors`. Their body limit is 64 KiB; an encoded definition is at
+most 4 KiB. New routes return JSON errors: 400 invalid input, 404 missing station,
+409 stale run/revision, 413 oversized body, 415 wrong content type, or 500 for an
+application failure. Rejected identities and invalid edits do not settle time.
+Valid writes settle first and return their exact post-command configuration.
+
+New reception sequences, counters, and revisions are decimal JSON strings to
+preserve uint64 precision. Reception sequences are independent per station;
+`transmissionSequence` identifies the original generated report. History responses
+include `nextAfter`, `hasMore`, `gap`, retained bounds, and `truncatedBefore`.
+Polling can miss retained events, especially at high speed. Recover current
+received targets through `/api/observations`; these survive reception-history gaps.
+
+Observation targets contain only received NMEA navigation, with per-station last
+receipt provenance. Scenario names/categories remain separately identified. Coverage
+is estimated GeoJSON MultiPolygon for the published reference transmitter, with
+90% and 50% contours per channel, split at the antimeridian. Signal power/margin
+are model estimates. See `internal/simulatorapi` package documentation for complete
+request examples, field units, selection, retention, and lifecycle rules.
+
 ## Display API
+
+The display currently consumes the complete generated fleet. Reception-based
+display filtering, station coverage, and signal inspectors are the next plan steps;
+the new station and observation APIs are available now to HTTP clients and the manager.
 
 `GET /display/api/vessels` returns `{ "simulationId": "...", "updatedAt": "...",
 "time": { "now": "...", "elapsedMs": 1400, "speed": 1, "paused": false },

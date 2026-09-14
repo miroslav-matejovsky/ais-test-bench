@@ -46,3 +46,17 @@ pre { padding: 1rem; background: #f1f5f7; overflow-x: auto; min-height: 5rem; }
 .clock { font-weight: 600; font-variant-numeric: tabular-nums; }
 .clock.stale { color: #8a4b00; }
 #map.stale { filter: grayscale(0.7); }
+
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+caption { text-align: left; font-weight: 600; }
+th, td { text-align: left; vertical-align: top; padding: 0.5rem; border-bottom: 1px solid #ccc; }
+td button { margin: 0.2rem; }
+.station-form { display: block; }
+.station-form fieldset { min-width: 0; margin: 0.75rem 0; }
+.station-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
+.station-grid label, .field-error { display: block; }
+.station-grid input:not([type="checkbox"]) { width: 100%; box-sizing: border-box; }
+.field-error { color: #a02020; white-space: pre-line; }
+[aria-invalid="true"] { outline: 2px solid #a02020; }
+summary { cursor: pointer; padding: 0.75rem 0; }

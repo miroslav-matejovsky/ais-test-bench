@@ -129,6 +129,7 @@ func TestReceptionIdentities(t *testing.T) {
 		require.Equal(t, uint64(1), r.ConfigRevision)
 		require.Equal(t, uint64(1), r.RFRevision)
 		require.Equal(t, simulation.ReceiverSnapshot{
+			Name:     "Second",
 			Latitude: 52, Longitude: 4, AntennaHeightMeters: 25, ReceiveGainDBi: 3, FeederLossDB: 2, Channel: site("").ChannelA,
 		}, r.Receiver)
 		require.InDelta(t, 1, r.Link.Probability, 0)

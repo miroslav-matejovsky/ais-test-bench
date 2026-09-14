@@ -12,6 +12,15 @@
 // per-run form state before the new run is rendered. Display uses the display
 // API (/display/api/vessels), Leaflet, and OpenStreetMap.
 //
+// The manager's stations.js independently polls /api/stations and renders site
+// configuration and receiving capabilities. It creates, edits, disables, and
+// deletes stations through revision-checked simulator routes, including a preset
+// disabling channel B. Drafts retain their starting run/revision across polls.
+// Conflicts display current values beside the preserved draft and require explicit
+// reconciliation. A draft from a removed site or previous run can be copied into
+// a new site, never silently applied to a reused run-local ID. Inputs are disabled
+// during writes, errors appear beside fields, and all labels use text-only DOM APIs.
+//
 // Both pages show the virtual UTC simulation time and effective speed from the
 // last successful response, without local extrapolation, and show connection
 // freshness separately as the real local receipt time. After a failed poll they

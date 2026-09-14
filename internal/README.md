@@ -5,6 +5,9 @@ authoritative fleet, latest reports, in-memory messages, and metadata.
 `simdriver` is the real-time driver that paces that engine. `simulator` holds
 the HTTP API, engine-to-wire conversion, manager composition, and runtime.
 `simulatorapi` holds the simulator API wire types shared with its consumers.
+The simulator API exposes atomic station configuration and received-observation
+snapshots, bounded reception paging, and revision-checked station commands. The
+manager owns station editing; reception decisions remain in the engine.
 
 The display component is `display`: a simulator HTTP client, the NMEA-derived
 map projection, the display API, and its runtime. It never imports simulator

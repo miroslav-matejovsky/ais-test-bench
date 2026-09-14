@@ -185,6 +185,14 @@ type StationSet struct {
 	Stations []Station
 }
 
+// StationConfiguration includes the committed clock and settings captured with
+// the station set. Unlike StationSet alone, it changes as virtual time advances.
+type StationConfiguration struct {
+	StationSet
+	Metadata      Metadata
+	StateRevision uint64
+}
+
 // Fleet is the complete active fleet copied from one consistent engine state.
 type Fleet struct {
 	// SimulationID is the opaque, nonempty identity of the engine run.
@@ -358,6 +366,8 @@ type Reception struct {
 // reception: site, antenna, and the capability of the received channel.
 // Settings.Transmitter holds the transmitter side.
 type ReceiverSnapshot struct {
+	// Name preserves the station label at reception, including after renames.
+	Name                string
 	Latitude            float64
 	Longitude           float64
 	AntennaHeightMeters float64

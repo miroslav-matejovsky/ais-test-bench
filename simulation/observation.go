@@ -186,6 +186,7 @@ func newReception(station *stationState, sequence uint64, t transmission, l link
 		VesselName: t.name, VesselTypeID: t.typeID,
 		ConfigRevision: station.configRevision, RFRevision: station.rfRevision,
 		Receiver: ReceiverSnapshot{
+			Name:     d.Name,
 			Latitude: d.Latitude, Longitude: d.Longitude, AntennaHeightMeters: d.AntennaHeightMeters,
 			ReceiveGainDBi: d.ReceiveGainDBi, FeederLossDB: d.FeederLossDB, Channel: d.receiver(t.channel),
 		},

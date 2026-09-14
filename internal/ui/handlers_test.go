@@ -44,6 +44,8 @@ func TestPages(t *testing.T) {
 				`<button id="apply-speed" type="submit" disabled>`,
 				`<button type="button" data-speed="0" disabled>Pause</button>`, `data-speed="0.5"`, `data-speed="2"`,
 				`id="speed-status" role="status"`, `id="save-status" role="status"`, `id="sim-clock"`,
+				`/static/js/stations.js`, `id="stations-body"`, `id="station-form"`, `id="station-fields" disabled`,
+				`id="station-conflict" hidden`, `id="station-rebase"`, `id="station-sector-error"`,
 			},
 			notContains: []string{`href="/display"`},
 		},
@@ -121,6 +123,7 @@ func TestStatic(t *testing.T) {
 	for path, want := range map[string]int{
 		"/static/js/htmx.min.js": http.StatusOK,
 		"/static/js/manager.js":  http.StatusOK,
+		"/static/js/stations.js": http.StatusOK,
 		"/static/js/display.js":  http.StatusOK,
 		"/static/css/app.css":    http.StatusOK,
 		"/static/nope.js":        http.StatusNotFound,

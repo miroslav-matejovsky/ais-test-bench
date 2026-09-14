@@ -40,6 +40,12 @@ func NewAPI(logger *slog.Logger, sim *simdriver.Driver) http.Handler {
 	mux.HandleFunc("GET /api/messages", a.history)
 	mux.HandleFunc("GET /api/metadata", a.metadata)
 	mux.HandleFunc("PUT /api/time", a.setTime)
+	mux.HandleFunc("GET /api/stations", a.stations)
+	mux.HandleFunc("POST /api/stations", a.addStation)
+	mux.HandleFunc("PUT /api/stations/{id}", a.updateStation)
+	mux.HandleFunc("DELETE /api/stations/{id}", a.removeStation)
+	mux.HandleFunc("GET /api/observations", a.observations)
+	mux.HandleFunc("GET /api/stations/{id}/receptions", a.receptions)
 	return mux
 }
 
@@ -125,8 +131,13 @@ func readJSON(w http.ResponseWriter, r *http.Request, value any) bool {
 }
 
 func (a *api) writeJSON(w http.ResponseWriter, r *http.Request, value any) {
+	a.writeStatusJSON(w, r, http.StatusOK, value)
+}
+
+func (a *api) writeStatusJSON(w http.ResponseWriter, r *http.Request, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		a.logger.Error("write JSON response", "path", r.URL.Path, "error", err)
 	}

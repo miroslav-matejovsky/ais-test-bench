@@ -100,6 +100,10 @@
 // return, it is finite: a cursor that falls behind it reports a Gap. Expiry and
 // eviction never remove history, and Observations rebuilds the live view after
 // any gap.
+// StationConfiguration captures station definitions together with metadata and
+// state revision under one read lock for HTTP configuration snapshots. Stations
+// remains the narrower configuration-only read. Reception receiver snapshots
+// preserve the station name at reception even after later renaming.
 //
 // # Virtual time
 //

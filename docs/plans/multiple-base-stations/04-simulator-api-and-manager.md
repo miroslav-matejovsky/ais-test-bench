@@ -7,6 +7,10 @@ complexity: "high"
 
 # Simulator HTTP contract and manager controls
 
+Status: implemented. The existing engine observations and station commands are
+exposed through the simulator HTTP boundary; the manager supports complete station
+editing. Display changes remain in steps 05-06.
+
 ## Outcome
 
 Expose a consistent observation snapshot and bounded station history over HTTP.
@@ -40,7 +44,7 @@ display needs without a second metadata or truth-fleet request.
 | Field group | Required content |
 | --- | --- |
 | Identity | `simulationId`, `stateRevision`, `stationSetRevision`, `snapshotAt` equal to committed virtual `time.now`. |
-| Clock and contract | `startedAt`, complete existing `time` shape, model version, reference transmitter, age/history limits, scenario type catalogue. |
+| Clock and contract | `startedAt`, complete existing `time` shape, effective model parameters, reference transmitter, age/history limits, scenario type catalogue. |
 | Selection | Canonical sorted station IDs; `all` resolves to existing stations including disabled ones. Reject an explicit empty selector. |
 | Stations | All current stations with labels, RF config/revisions, effective channel status, coverage geometry, counters, recent rate windows, and history bounds. |
 | Targets | Up to 1,000 distinct observed MMSIs in the selected union; chosen received report and scenario metadata; age/status; compact last reception provenance for every selected observing station. |
@@ -139,3 +143,42 @@ browser checklist; do not introduce a frontend build solely for these forms.
 - Station edits use existing simulation-time settlement and serialization rules.
 - Manager controls expose all implemented capabilities and surface write conflicts.
 - Wire docs contain complete field, unit, lifecycle, selection, and error semantics.
+
+## Implementation and verification record
+
+- Added atomic `StationConfiguration` reads, combining configuration with its
+  committed clock/settings and state revision. Existing configuration-only
+  `Stations` reads retain their semantics. Driver commands return their own
+  complete resulting snapshot while holding the command lock.
+- Added all seven routes above with strict required fields, body limits,
+  run/revision conflicts, decimal-string uint64 identities, bounded history,
+  explicit gaps, and canonical station selections. Error fields identify form
+  inputs; station-capacity rejection and cancellation occur before settlement.
+- Converted continuous engine rings to GeoJSON MultiPolygon with antimeridian
+  cuts and counterclockwise exteriors. The existing latitude limit of [-85, 85]
+  and unversioned proof-of-concept model remain unchanged. Effective model
+  constants are published in settings instead of adding a model version.
+- Preserved reception-time station names as well as existing receiver/link
+  diagnostics, so renaming a site does not change historical attribution.
+- Added a separate manager station script with complete site/channel/sector
+  controls, channel-B failure preset, create/edit/disable/delete, and explicit
+  reconciliation of preserved drafts after another editor or run changes state.
+- Removed the temporary dead-code allowlist for APIs now reachable through HTTP.
+- Automated coverage includes creation-report reception, exact NMEA/sequence
+  preservation, unseen position updates, stale edits, concurrent edits/ticks,
+  canceled paused commands, validation and errors, history rollover, and payload
+  bounds at 16 stations and 1,000 observed targets. Maximum-occupancy observation
+  and 200-event history fixtures fit the 8 MiB and 2 MiB consumer budgets.
+- A headless Edge browser check passed loading, draft preservation during an
+  external edit, conflict review/retry, station creation, overlapping-sector
+  errors, channel-B preset, and deletion without JavaScript exceptions. The
+  rendered manager form and capability table were visually inspected.
+- `task all` passed, including 556 tests, formatting, vet, dead-code, architecture,
+  and lint checks. Root/package documentation and `.todo` reflect step 04 completion.
+
+Browser recheck procedure: run the combined application, pause it, open the manager,
+edit a station name, and change that station through another tab or the API before
+saving. Confirm the draft remains and requires revision review. Create a site,
+submit overlapping sectors, resolve or discard the draft, apply Disable B to the
+harbour receiver, and delete the new site. Verify the table and API agree after
+each write. The display's generated-fleet feed is unchanged in this step.
