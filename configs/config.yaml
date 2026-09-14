@@ -1,0 +1,39 @@
+server:
+  address: "127.0.0.1:8080"
+  read_header_timeout: 5s
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+  max_body_bytes: 1048576
+
+simulation:
+  tick_interval: 1s
+  speed: 1.0
+  seed: 1
+  data_directory: "./data"
+  autostart_scenario: ""
+
+tcp:
+  enabled: true
+  address: "127.0.0.1:10110"
+  max_clients: 32
+  queue_capacity: 128
+  write_timeout: 5s
+
+udp:
+  enabled: true
+  local_address: "127.0.0.1:0"
+  destinations:
+    - "127.0.0.1:10111"
+  broadcast: false
+  queue_capacity: 128
+  write_timeout: 5s
+
+logging:
+  level: "info"
+  format: "json"
+
+ui:
+  admin_enabled: true
+  viewer_enabled: true

@@ -2,5 +2,11 @@
 
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
-Keep this file short; the structured backlog of lower-priority follow-ups lives in
-`docs/backlog/` (start at `docs/backlog/README.md`), and the architecture overview in `README.md`.
+The architecture scaffold is defined in README.md and docs/.
+
+- Implement strict configuration loading, validation, and bootstrap/lifecycle wiring.
+- Implement scenario/vessel repositories, deterministic simulation, and movement.
+- Implement AIS message generation, validated encoding, and TCP/UDP adapters.
+- Implement REST handlers, middleware, operational health, and metrics.
+- Build independent admin/viewer frontends and local chart integration.
+- Add behavioral unit, integration, and simulation tests with each implementation.
