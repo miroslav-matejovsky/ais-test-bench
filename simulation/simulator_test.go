@@ -73,14 +73,37 @@ func runSteps(t *testing.T, s *simulation.Simulator, steps ...step) []simulation
 
 // snapshot is every observable read of an engine.
 type snapshot struct {
-	Fleet    simulation.Fleet
-	History  simulation.History
-	Metadata simulation.Metadata
-	Stations simulation.StationSet
+	Fleet        simulation.Fleet
+	History      simulation.History
+	Metadata     simulation.Metadata
+	Stations     simulation.StationSet
+	Observations simulation.Observations
+	Receptions   map[string]simulation.ReceptionPage // Complete retained history by station.
 }
 
-func observe(s *simulation.Simulator) snapshot {
-	return snapshot{Fleet: s.Fleet(), History: s.History(), Metadata: s.Metadata(), Stations: s.Stations()}
+func observe(t *testing.T, s *simulation.Simulator) snapshot {
+	t.Helper()
+	observations, err := s.Observations(nil)
+	require.NoError(t, err)
+	receptions := map[string]simulation.ReceptionPage{}
+	for _, id := range observations.Selection {
+		page, err := s.ReceptionHistory(id, nil, simulation.ReceptionHistoryLimit)
+		require.NoError(t, err)
+		receptions[id] = page
+	}
+	return snapshot{
+		Fleet: s.Fleet(), History: s.History(), Metadata: s.Metadata(), Stations: s.Stations(),
+		Observations: observations, Receptions: receptions,
+	}
+}
+
+// observeOutcome is observe without the state revision, which counts commits
+// and so differs between split and combined calls.
+func observeOutcome(t *testing.T, s *simulation.Simulator) snapshot {
+	t.Helper()
+	result := observe(t, s)
+	result.Observations.StateRevision = 0
+	return result
 }
 
 // decode returns the navigation data of an AIS sentence.
@@ -214,12 +237,12 @@ func TestFleetLifecycle(t *testing.T) {
 	runSteps(t, s, setCount(1))
 	require.NotEqual(t, vessel.MMSI, s.Fleet().Vessels[0].MMSI)
 
-	before := observe(s)
+	before := observe(t, s)
 	for _, count := range []int{-1, simulation.MaxVessels + 1} {
 		reports, err := s.SetCount(count)
 		require.ErrorIs(t, err, simulation.ErrInvalid)
 		require.Nil(t, reports)
-		require.Equal(t, before, observe(s))
+		require.Equal(t, before, observe(t, s))
 	}
 }
 
@@ -369,16 +392,18 @@ func TestSpeedScalesElapsedTime(t *testing.T) {
 
 func TestSetSpeedRejectsInvalidValues(t *testing.T) {
 	s := newSimulator(t, testConfig(1, 1))
-	before := observe(s)
+	before := observe(t, s)
 	for _, speed := range []float64{-0.01, math.NaN(), math.Inf(1), math.Inf(-1), 100.01, 0.001, 1e-12, 0.015} {
 		require.ErrorIs(t, s.SetSpeed(speed), simulation.ErrInvalid)
 		require.ErrorIs(t, simulation.ValidateSpeed(speed), simulation.ErrInvalid)
 	}
-	require.Equal(t, before, observe(s))
+	require.Equal(t, before, observe(t, s))
 }
 
 func TestSplitCallsMatchCombined(t *testing.T) {
 	ms := time.Millisecond
+	config := testConfig(9, 3)
+	config.Stations = receivers()
 	groups := map[string][][]step{
 		"ten seconds": {
 			{advance(10 * time.Second)},
@@ -398,14 +423,17 @@ func TestSplitCallsMatchCombined(t *testing.T) {
 	}
 	for name, scenarios := range groups {
 		t.Run(name, func(t *testing.T) {
-			reference := newSimulator(t, testConfig(9, 3))
+			reference := newSimulator(t, config)
 			want := runSteps(t, reference, scenarios[0]...)
 			for i, steps := range scenarios[1:] {
-				s := newSimulator(t, testConfig(9, 3))
+				s := newSimulator(t, config)
 				require.Equal(t, want, runSteps(t, s, steps...), "scenario %d", i+1)
-				require.Equal(t, observe(reference), observe(s), "scenario %d", i+1)
+				require.Equal(t, observeOutcome(t, reference), observeOutcome(t, s), "scenario %d", i+1)
 			}
 			require.Equal(t, start.Add(10*time.Second), reference.Metadata().Time.Now)
+			marginal := observe(t, reference).Observations.Stations[1].Counters
+			require.NotZero(t, marginal.Received, "the marginal station receives")
+			require.NotZero(t, marginal.ProbabilisticLoss+marginal.OutsideHorizon, "the marginal station misses")
 		})
 	}
 }
@@ -413,6 +441,7 @@ func TestSplitCallsMatchCombined(t *testing.T) {
 func TestElapseCarriesSubNanosecondRemainder(t *testing.T) {
 	config := testConfig(2, 2)
 	config.Speed = 0.33
+	config.Stations = receivers()
 	scenarios := [][]step{
 		{elapse(10*time.Second + 3), elapse(1), setSpeed(2), elapse(time.Second), advance(time.Second), setSpeed(0.01), elapse(68)},
 		{
@@ -429,15 +458,15 @@ func TestElapseCarriesSubNanosecondRemainder(t *testing.T) {
 	for _, steps := range scenarios[1:] {
 		s := newSimulator(t, config)
 		require.Equal(t, want, runSteps(t, s, steps...))
-		require.Equal(t, observe(reference), observe(s))
+		require.Equal(t, observeOutcome(t, reference), observeOutcome(t, s))
 	}
 }
 
 func TestPauseDiscardsElapsedTime(t *testing.T) {
 	s := newSimulator(t, testConfig(5, 2))
-	before := observe(s)
+	before := observe(t, s)
 	require.NoError(t, s.SetSpeed(1))
-	require.Equal(t, before, observe(s), "a repeated speed is a no-op")
+	require.Equal(t, before, observe(t, s), "a repeated speed is a no-op")
 	require.NoError(t, s.SetSpeed(0))
 	require.Equal(t, before.History, s.History(), "setting speed emits no reports")
 	require.Equal(t, simulation.TimeState{Now: start, Speed: 0, Paused: true}, s.Metadata().Time)
@@ -538,7 +567,7 @@ func TestEmptyFleetKeepsClock(t *testing.T) {
 
 func TestFailedAdvancesChangeNothing(t *testing.T) {
 	s := newSimulator(t, testConfig(1, 1))
-	before := observe(s)
+	before := observe(t, s)
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	for _, tt := range []struct {
@@ -558,18 +587,19 @@ func TestFailedAdvancesChangeNothing(t *testing.T) {
 			reports, err := tt.call()
 			require.ErrorIs(t, err, tt.want)
 			require.Nil(t, reports)
-			require.Equal(t, before, observe(s))
+			require.Equal(t, before, observe(t, s))
 		})
 	}
 
 	require.NoError(t, s.SetSpeed(simulation.MaxSpeed))
+	before = observe(t, s)
 	for _, realDelta := range []time.Duration{simulation.MaxAdvance/100 + 1, math.MaxInt64} {
 		reports, err := s.Elapse(t.Context(), realDelta)
 		require.ErrorIs(t, err, simulation.ErrLimit)
 		require.Nil(t, reports)
 	}
+	require.Equal(t, before, observe(t, s))
 	require.NoError(t, s.SetSpeed(1))
-	require.Equal(t, before, observe(s))
 
 	require.Empty(t, runSteps(t, s, advance(0)))
 	require.Len(t, runSteps(t, s, advance(simulation.MaxAdvance)), 60)
@@ -593,21 +623,22 @@ func (c *cancelAfter) Err() error {
 func TestCancellationBetweenTicksRollsBack(t *testing.T) {
 	config := testConfig(6, 3)
 	config.Speed = 0.33
+	config.Stations = receivers()
 	s, control := newSimulator(t, config), newSimulator(t, config)
 	// Both engines carry a scaling remainder into the cancelled call.
 	runSteps(t, s, elapse(3))
 	runSteps(t, control, elapse(3))
-	before := observe(s)
+	before := observe(t, s)
 
 	// 30s at 0.33x covers nine ticks; the fourth tick sees the cancellation.
 	reports, err := s.Elapse(&cancelAfter{Context: t.Context(), checks: 3}, 30*time.Second)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, reports)
-	require.Equal(t, before, observe(s))
+	require.Equal(t, before, observe(t, s))
 
 	steps := []step{elapse(30 * time.Second), elapse(1)}
 	require.Equal(t, runSteps(t, control, steps...), runSteps(t, s, steps...))
-	require.Equal(t, observe(control), observe(s))
+	require.Equal(t, observe(t, control), observe(t, s))
 }
 
 func TestTimestampsCrossCalendarBoundaries(t *testing.T) {
@@ -626,11 +657,11 @@ func TestTimestampsCrossCalendarBoundaries(t *testing.T) {
 
 	config.StartTime = time.Date(9999, 12, 31, 23, 59, 30, 0, time.UTC)
 	late := newSimulator(t, config)
-	before := observe(late)
+	before := observe(t, late)
 	reports, err := late.Advance(t.Context(), 30*time.Second)
 	require.ErrorIs(t, err, simulation.ErrLimit)
 	require.Nil(t, reports)
-	require.Equal(t, before, observe(late))
+	require.Equal(t, before, observe(t, late))
 	require.Len(t, runSteps(t, late, advance(30*time.Second-1)), 29)
 	require.Equal(t, time.Date(9999, 12, 31, 23, 59, 59, 999999999, time.UTC), late.Metadata().Time.Now)
 	_, err = late.Elapse(t.Context(), 1)
@@ -721,6 +752,10 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 				ZeroProbabilityMarginDB: -12, ReferenceProbability: 0.8, FullProbabilityMarginDB: 6,
 				CoverageThresholds: []float64{0.9, 0.5},
 			},
+			Observation: simulation.ObservationSettings{
+				ReceptionHistoryLimit: 1000, TargetLimit: 1000, RecentReceptionLimit: 50,
+				FreshAgeMs: 10000, StaleAgeMs: 60000, ExpiryAgeMs: 600000, RateWindowMs: 60000,
+			},
 		},
 	}, metadata)
 	require.Len(t, s.Fleet().Vessels, metadata.Settings.InitialVesselCount)
@@ -751,7 +786,7 @@ func TestSeedReproducesRun(t *testing.T) {
 	for _, seed := range []uint64{0, 42} {
 		a, b := newSimulator(t, testConfig(seed, 2)), newSimulator(t, testConfig(seed, 2))
 		require.Equal(t, runSteps(t, a, steps...), runSteps(t, b, steps...))
-		require.Equal(t, observe(a), observe(b))
+		require.Equal(t, observe(t, a), observe(t, b))
 	}
 	require.NotEqual(t, newSimulator(t, testConfig(0, 2)).Fleet(), newSimulator(t, testConfig(42, 2)).Fleet())
 }
@@ -766,7 +801,9 @@ func TestRunIdentity(t *testing.T) {
 func TestConcurrentAccess(t *testing.T) {
 	ms := time.Millisecond
 	steps := []step{setCount(5), advance(1500 * ms), setSpeed(2), elapse(700 * ms), setCount(2), advance(3 * time.Second)}
-	control, s := newSimulator(t, testConfig(1, 1)), newSimulator(t, testConfig(1, 1))
+	config := testConfig(1, 1)
+	config.Stations = receivers()
+	control, s := newSimulator(t, config), newSimulator(t, config)
 
 	// Concurrent readers do not change serialized deterministic mutations.
 	stop := make(chan struct{})
@@ -781,6 +818,9 @@ func TestConcurrentAccess(t *testing.T) {
 					s.Fleet()
 					s.History()
 					s.Metadata()
+					if _, err := s.Observations(nil); err != nil {
+						t.Error(err)
+					}
 				}
 			}
 		})
@@ -789,7 +829,7 @@ func TestConcurrentAccess(t *testing.T) {
 	close(stop)
 	readers.Wait()
 	require.Equal(t, runSteps(t, control, steps...), got)
-	require.Equal(t, observe(control), observe(s))
+	require.Equal(t, observe(t, control), observe(t, s))
 
 	// Concurrent mutations are safe; their order is not deterministic.
 	var writers sync.WaitGroup

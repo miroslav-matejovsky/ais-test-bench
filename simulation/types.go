@@ -103,8 +103,13 @@ type Station struct {
 	// RFRevision starts at 1 and increases on every edit that affects reception
 	// or coverage, which is every field except Name.
 	RFRevision uint64
-	// CreatedAt is the virtual UTC instant the station was added.
+	// CreatedAt is the virtual UTC instant the station was added. Reception
+	// counters count from it.
 	CreatedAt time.Time
+	// RFUpdatedAt is the virtual UTC instant of the latest RF revision, CreatedAt
+	// before the first RF edit. Counters and recent windows span RF revisions; a
+	// window starting before RFUpdatedAt mixes revisions.
+	RFUpdatedAt time.Time
 	// Coverage holds the contours for channel A then B, each at probability 0.9
 	// then 0.5, for Settings.Transmitter. It changes only with the RF revision.
 	Coverage []Coverage
@@ -295,6 +300,255 @@ type Settings struct {
 	Transmitter TransmitterProfile
 	// Reception is the reception model.
 	Reception ReceptionModel
+	// Observation holds the reception history, target store, and age limits.
+	Observation ObservationSettings
+}
+
+// ObservationSettings are the fixed limits of reception state. Ages are virtual
+// time, chosen for the one-second report cadence; they are not standard AIS
+// target aging rules.
+type ObservationSettings struct {
+	// ReceptionHistoryLimit is the number of newest receptions kept per station.
+	ReceptionHistoryLimit int
+	// TargetLimit is the number of distinct MMSIs in the observation store.
+	TargetLimit int
+	// RecentReceptionLimit is the size of Observations.RecentReceptions.
+	RecentReceptionLimit int
+	// FreshAgeMs is the largest fresh age; StaleAgeMs the largest stale age.
+	// Older observations are lost until they reach ExpiryAgeMs and are removed.
+	FreshAgeMs  int64
+	StaleAgeMs  int64
+	ExpiryAgeMs int64
+	// RateWindowMs is the longest span of recent station counters.
+	RateWindowMs int64
+}
+
+// Reception is one station's successful decoding of one transmission. It is
+// self-contained: it can outlive the transmission in History and keeps the
+// station configuration and scenario attribution of its reception instant.
+type Reception struct {
+	StationID string
+	// Sequence is the station's reception number. It starts at 1 and is
+	// contiguous per station across RF edits. Sequences of different stations
+	// are unrelated.
+	Sequence uint64
+	// TransmissionSequence is the Message.Sequence of the received report.
+	TransmissionSequence uint64
+	MMSI                 uint32
+	Channel              Channel
+	// Timestamp is the virtual UTC transmission instant. Receive latency is not
+	// modelled, so it is also the receive instant.
+	Timestamp time.Time
+	// Sentence is the exact transmitted sentence including CRLF.
+	Sentence string
+	// VesselName and VesselTypeID are scenario metadata of the transmitting
+	// vessel at transmission time. Type 1 reports do not carry them.
+	VesselName   string
+	VesselTypeID string
+	// ConfigRevision and RFRevision identify the station configuration used.
+	ConfigRevision uint64
+	RFRevision     uint64
+	// Receiver is the station RF configuration used.
+	Receiver ReceiverSnapshot
+	// Link is the model evaluation that decided the reception.
+	Link ReceptionLink
+}
+
+// ReceiverSnapshot is the part of a station definition that explains one
+// reception: site, antenna, and the capability of the received channel.
+// Settings.Transmitter holds the transmitter side.
+type ReceiverSnapshot struct {
+	Latitude            float64
+	Longitude           float64
+	AntennaHeightMeters float64
+	ReceiveGainDBi      float64
+	FeederLossDB        float64
+	Channel             ReceiverChannel
+}
+
+// ReceptionLink holds reception model diagnostics, not measurements.
+type ReceptionLink struct {
+	// DistanceMeters is the geodesic distance from station to transmitter.
+	DistanceMeters float64
+	// BearingDegrees is the true bearing from station to transmitter in
+	// [0, 360), nil at coincident positions.
+	BearingDegrees *float64
+	HorizonMeters  float64
+	// ShadowLossDB is the loss of the shadow sector containing the bearing, or 0.
+	ShadowLossDB            float64
+	ReceivedPowerDBm        float64
+	EffectiveSensitivityDBm float64
+	MarginDB                float64
+	// Probability is the decode probability the reception draw was compared with.
+	Probability float64
+}
+
+// ReceptionCounters count reception opportunities of one station since
+// CreatedAt. Every transmission generated while the station exists is one
+// opportunity, including while it is disabled. Exactly one outcome counter
+// increases per opportunity, so Received plus the loss counters equals
+// Opportunities. Counters never decrease.
+type ReceptionCounters struct {
+	Opportunities uint64
+	Received      uint64
+	// StationDisabled through ProbabilisticLoss are the loss reasons, in
+	// precedence order.
+	StationDisabled    uint64
+	ChannelDisabled    uint64
+	OutsideHorizon     uint64
+	InsufficientMargin uint64
+	ProbabilisticLoss  uint64
+	ChannelA           ChannelCounters
+	ChannelB           ChannelCounters
+}
+
+// ChannelCounters count the opportunities and receptions on one channel.
+type ChannelCounters struct {
+	Opportunities uint64
+	Received      uint64
+}
+
+// RecentCounters count the opportunities and receptions of one station in the
+// latest one-second buckets of the rate window. A bucket holds the events of
+// one virtual second after the start instant; the window holds the bucket of
+// the current second and the RateWindow/TickInterval-1 buckets before it, so
+// it counts exactly the tick reports of the last RateWindow.
+type RecentCounters struct {
+	// Duration is min(RateWindow, now - CreatedAt).
+	Duration      time.Duration
+	Opportunities uint64
+	Received      uint64
+	// OpportunityRate and ReceptionRate are counts per virtual second of
+	// Duration, nil when Duration is 0.
+	OpportunityRate *float64
+	ReceptionRate   *float64
+	// ReceiveRatio is Received/Opportunities, nil without opportunities.
+	ReceiveRatio *float64
+}
+
+// TargetStatus classifies the age of an observation: now minus its timestamp.
+type TargetStatus string
+
+// Observation statuses. Observations aged ExpiryAge or more are removed.
+const (
+	TargetFresh TargetStatus = "fresh" // Age at most FreshAge.
+	TargetStale TargetStatus = "stale" // Age above FreshAge, at most StaleAge.
+	TargetLost  TargetStatus = "lost"  // Age above StaleAge, below ExpiryAge.
+)
+
+// Observations is received traffic copied from one committed engine state. It
+// contains only successfully received reports, never simulation truth.
+type Observations struct {
+	// Metadata is the run identity, clock, catalog, and settings of the state.
+	// Metadata.Time.Now is the snapshot instant all ages refer to.
+	Metadata Metadata
+	// StateRevision increases with every mutation that changes the committed
+	// clock, fleet, speed, stations, or reception state. Reads, no-op calls, and
+	// sub-nanosecond Elapse remainders keep it.
+	StateRevision uint64
+	// StationSetRevision is StationSet.Revision.
+	StationSetRevision uint64
+	// Selection is the selected station IDs in creation order.
+	Selection []string
+	// Stations are all configured stations in creation order, selected or not.
+	Stations []StationObservation
+	// Targets are the MMSIs observed by at least one selected station, by
+	// ascending MMSI. There are at most TargetLimit.
+	Targets []ObservedTarget
+	// CurrentTargets counts fresh and stale Targets; LostTargets counts lost ones.
+	CurrentTargets int
+	LostTargets    int
+	// RecentReceptions are the newest RecentReceptionLimit receptions of the
+	// selected stations, ordered by timestamp, transmission sequence, and
+	// station creation order. They are a sample, not a continuous feed.
+	RecentReceptions []Reception
+	// Transmissions is the latest transmission sequence, so the number of
+	// generated reports. ReceivedTransmissions counts those received by at least
+	// one station, and Receptions counts every successful reception at every
+	// station, including removed stations. A report received at three stations
+	// adds one to ReceivedTransmissions and three to Receptions.
+	Transmissions         uint64
+	ReceivedTransmissions uint64
+	Receptions            uint64
+	// TargetEvictions counts targets removed because the store held TargetLimit
+	// MMSIs. Expiry does not count.
+	TargetEvictions uint64
+}
+
+// StationObservation is one station with its reception state.
+type StationObservation struct {
+	Station  Station
+	Counters ReceptionCounters
+	// ReceiveRatio is Counters.Received/Counters.Opportunities, nil without
+	// opportunities. It is a simulated opportunity ratio, not a measured packet
+	// error rate.
+	ReceiveRatio *float64
+	Recent       RecentCounters
+	// OldestReception and LatestReception bound the station's retained
+	// reception history. Both are nil before its first reception.
+	OldestReception *uint64
+	LatestReception *uint64
+	// CurrentTargets and LostTargets count this station's fresh and stale, and
+	// lost, observations.
+	CurrentTargets int
+	LostTargets    int
+}
+
+// ObservedTarget is one MMSI as seen by the selected stations.
+type ObservedTarget struct {
+	MMSI uint32
+	// Report is the chosen reception: the highest transmission sequence among
+	// the selected stations' latest observations, from the first such station
+	// in creation order. Its sentence is the target's navigation.
+	Report Reception
+	// Age and Status refer to Report.
+	Age    time.Duration
+	Status TargetStatus
+	// Stations is the latest observation of every selected station that holds
+	// one, in creation order.
+	Stations []TargetStation
+}
+
+// TargetStation is the compact latest observation of one target at one station.
+type TargetStation struct {
+	StationID string
+	// StationEnabled is the station's current administrative state. Disabled
+	// stations keep their observations until they expire.
+	StationEnabled       bool
+	Sequence             uint64
+	TransmissionSequence uint64
+	Timestamp            time.Time
+	Channel              Channel
+	ReceivedPowerDBm     float64
+	RFRevision           uint64
+	Age                  time.Duration
+	Status               TargetStatus
+	// Chosen reports whether this station received ObservedTarget.Report's
+	// transmission. Other stations last received an older report.
+	Chosen bool
+}
+
+// ReceptionPage is a bounded, ascending part of one station's retained
+// reception history.
+type ReceptionPage struct {
+	SimulationID string
+	StationID    string
+	// Tail reports a request without cursor, which returns the newest receptions.
+	Tail bool
+	// OldestSequence and LatestSequence bound the retained history, nil before
+	// the first reception.
+	OldestSequence *uint64
+	LatestSequence *uint64
+	// Receptions is a non-nil slice ordered by sequence.
+	Receptions []Reception
+	// NextAfter is the cursor of the next request: the last returned sequence,
+	// or else the request cursor, 0 for a tail.
+	NextAfter uint64
+	// HasMore reports retained receptions after NextAfter.
+	HasMore bool
+	// Gap reports that receptions directly after the cursor were evicted from
+	// history, so the page does not continue the caller's sequence.
+	Gap bool
 }
 
 // SpeedLimits is the accepted running speed range and precision. Speed 0 is the

@@ -75,6 +75,7 @@ type stationState struct {
 	configRevision uint64
 	rfRevision     uint64
 	createdAt      time.Time
+	rfUpdatedAt    time.Time
 	coverage       []Coverage // Computed for the current RF revision.
 }
 
@@ -97,12 +98,13 @@ func (s *Simulator) Stations() StationSet {
 
 // AddStation adds a station at the current virtual instant and returns its new
 // ID with the resulting configuration. The station gets revision 1 for both
-// config and RF. It draws no vessel randomness and changes no report.
+// config and RF and zero counters. It receives only later reports, draws no
+// vessel randomness, and changes no report.
 //
 // Errors: an invalid definition wraps ErrInvalid; expectedRevision other than
 // the current StationSet.Revision wraps ErrConflict; MaxStations existing
-// stations or an exhausted ID or revision range wraps ErrLimit. A failure
-// changes nothing.
+// stations or an exhausted ID, station set revision, or state revision range
+// wraps ErrLimit. A failure changes nothing.
 func (s *Simulator) AddStation(expectedRevision uint64, definition StationDefinition) (string, StationSet, error) {
 	canonical, err := canonicalStation(definition)
 	if err != nil {
@@ -116,18 +118,20 @@ func (s *Simulator) AddStation(expectedRevision uint64, definition StationDefini
 	if len(s.state.stations) >= MaxStations {
 		return "", StationSet{}, fmt.Errorf("%w: at most %d stations", ErrLimit, MaxStations)
 	}
-	if s.state.lastStationID == math.MaxUint64 || s.state.stationRevision == math.MaxUint64 {
+	if s.state.lastStationID == math.MaxUint64 || s.state.stationRevision == math.MaxUint64 || s.state.revision == math.MaxUint64 {
 		return "", StationSet{}, fmt.Errorf("%w: station id or revision range exhausted", ErrLimit)
 	}
 	s.state.lastStationID++
+	now := s.start.Add(s.state.elapsed)
 	station := stationState{
 		id: stationID(s.state.lastStationID), definition: canonical,
-		configRevision: firstRevision, rfRevision: firstRevision,
-		createdAt: s.start.Add(s.state.elapsed),
-		coverage:  computeCoverage(s.transmitter, canonical),
+		configRevision: firstRevision, rfRevision: firstRevision, createdAt: now, rfUpdatedAt: now,
+		coverage: computeCoverage(s.transmitter, canonical),
 	}
 	s.state.stations = append(s.state.stations, station)
+	s.store.stations[station.id] = &stationReceptions{}
 	s.state.stationRevision++
+	s.state.revision++
 	return station.id, s.stationSet(), nil
 }
 
@@ -135,7 +139,8 @@ func (s *Simulator) AddStation(expectedRevision uint64, definition StationDefini
 // configuration. An edit equal to the stored canonical definition is a no-op
 // that keeps all revisions. Otherwise the config revision and set revision
 // increase, and the RF revision increases unless only Name changed. ID and
-// creation time never change.
+// creation time never change. Counters, history, and observations are kept;
+// later decisions use the new revision.
 //
 // Errors: an invalid definition wraps ErrInvalid; a stale expectedRevision wraps
 // ErrConflict; an unknown id wraps ErrNotFound; an exhausted revision range
@@ -162,26 +167,29 @@ func (s *Simulator) UpdateStation(expectedRevision uint64, id string, definition
 	named.Name = canonical.Name
 	rfChanged := !equalStation(named, canonical)
 	if station.configRevision == math.MaxUint64 || s.state.stationRevision == math.MaxUint64 ||
-		(rfChanged && station.rfRevision == math.MaxUint64) {
+		s.state.revision == math.MaxUint64 || (rfChanged && station.rfRevision == math.MaxUint64) {
 		return StationSet{}, fmt.Errorf("%w: station %s revision range exhausted", ErrLimit, id)
 	}
 	station.definition = canonical
 	station.configRevision++
 	if rfChanged {
 		station.rfRevision++
+		station.rfUpdatedAt = s.start.Add(s.state.elapsed)
 		station.coverage = computeCoverage(s.transmitter, canonical)
 	}
 	s.state.stations[i] = station
 	s.state.stationRevision++
+	s.state.revision++
 	return s.stationSet(), nil
 }
 
 // RemoveStation removes station id from the configuration and returns the
-// result. Its ID is not reused. Removing the last station leaves vessel
-// generation running.
+// result. Its counters, reception history, and observations are removed; run
+// reception totals keep its receptions. Its ID is not reused. Removing the last
+// station leaves vessel generation running.
 //
 // Errors: a stale expectedRevision wraps ErrConflict; an unknown id wraps
-// ErrNotFound; an exhausted set revision wraps ErrLimit. A failure changes
+// ErrNotFound; an exhausted revision range wraps ErrLimit. A failure changes
 // nothing.
 func (s *Simulator) RemoveStation(expectedRevision uint64, id string) (StationSet, error) {
 	s.mu.Lock()
@@ -193,11 +201,13 @@ func (s *Simulator) RemoveStation(expectedRevision uint64, id string) (StationSe
 	if err != nil {
 		return StationSet{}, err
 	}
-	if s.state.stationRevision == math.MaxUint64 {
-		return StationSet{}, fmt.Errorf("%w: station set revision range exhausted", ErrLimit)
+	if s.state.stationRevision == math.MaxUint64 || s.state.revision == math.MaxUint64 {
+		return StationSet{}, fmt.Errorf("%w: station set or state revision range exhausted", ErrLimit)
 	}
 	s.state.stations = slices.Delete(s.state.stations, i, i+1)
+	s.store.removeStation(id)
 	s.state.stationRevision++
+	s.state.revision++
 	return s.stationSet(), nil
 }
 
@@ -214,7 +224,7 @@ func newStations(definitions []StationDefinition, at time.Time, tx TransmitterPr
 		}
 		stations = append(stations, stationState{
 			id: stationID(uint64(i + 1)), definition: canonical,
-			configRevision: firstRevision, rfRevision: firstRevision, createdAt: at,
+			configRevision: firstRevision, rfRevision: firstRevision, createdAt: at, rfUpdatedAt: at,
 			coverage: computeCoverage(tx, canonical),
 		})
 	}
@@ -239,7 +249,7 @@ func (s *Simulator) stationSet() StationSet {
 		stations = append(stations, Station{
 			ID: station.id, Definition: definition,
 			ConfigRevision: station.configRevision, RFRevision: station.rfRevision,
-			CreatedAt: station.createdAt, Coverage: coverage,
+			CreatedAt: station.createdAt, RFUpdatedAt: station.rfUpdatedAt, Coverage: coverage,
 		})
 	}
 	return StationSet{SimulationID: s.id, Revision: s.state.stationRevision, Stations: stations}

@@ -154,10 +154,17 @@ for _, report := range reports {
   each station channel a receive probability for the reference transmitter.
   Its fixed parameters are in `Metadata().Settings.Reception`; they are
   test-bench choices, not calibrated predictions. Each station carries 90% and
-  50% coverage rings per channel from the same model. Applying reception to
-  generated reports is future work.
+  50% coverage rings per channel from the same model.
   The application starts with three demonstration sites, documented in
   `internal/simdriver`.
+- **Receptions:** every report is evaluated at every station. `Observations(stationIDs)`
+  returns one consistent snapshot of what the selected stations actually
+  received: per-station counters and 60-second rates, one target per MMSI built
+  only from received reports, and the newest 50 receptions. Targets are fresh
+  up to 10 s, stale up to 60 s, then lost until removed at 600 s of virtual age;
+  at most 1,000 MMSIs are kept, evicting the oldest. `ReceptionHistory` pages
+  through the newest 1,000 receptions per station and reports gaps. Transmission
+  sequences and per-station reception sequences are separate identities.
 - **Messages:** `SetCount` returns the creation reports; `Advance` and `Elapse`
   return every report they emit, in sequence order, as `Message{Sequence, MMSI,
   Timestamp, Sentence}`. Sentences are checksummed type 1 `!AIVDM` lines with
@@ -184,7 +191,7 @@ for _, report := range reports {
   concurrent use, but concurrent callers get no deterministic order.
 
 The runnable examples cover initial creation, batches, stepping, speed scaling,
-and pause: `go doc -all ./simulation`.
+pause, station edits, and observations: `go doc -all ./simulation`.
 
 ## Simulator API
 

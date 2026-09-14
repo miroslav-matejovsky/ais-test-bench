@@ -58,6 +58,7 @@ type link struct {
 	// nil at coincident positions where it is undefined.
 	bearingDegrees          *float64
 	horizonMeters           float64
+	shadowLossDB            float64
 	receivedPowerDBm        float64
 	effectiveSensitivityDBm float64
 	marginDB                float64
@@ -87,9 +88,9 @@ func evaluateLink(tx TransmitterProfile, latitude, longitude float64, station St
 // linkAt evaluates the model at a distance and optional bearing from the
 // station. Without a bearing no shadow sector applies.
 func linkAt(tx TransmitterProfile, station StationDefinition, channel Channel, distanceMeters float64, bearing *float64) link {
-	receiver, frequency := station.ChannelA, channelAFrequencyMHz
+	receiver, frequency := station.receiver(channel), channelAFrequencyMHz
 	if channel == ChannelB {
-		receiver, frequency = station.ChannelB, channelBFrequencyMHz
+		frequency = channelBFrequencyMHz
 	}
 	kilometers := max(distanceMeters/1000, minPathKilometers)
 	freeSpaceLoss := 32.4 + 20*math.Log10(frequency) + 20*math.Log10(kilometers)
@@ -103,13 +104,21 @@ func linkAt(tx TransmitterProfile, station StationDefinition, channel Channel, d
 	sensitivity := receiver.SensitivityDBm + receiver.NoisePenaltyDB
 	horizon := horizonMeters(tx.HeightMeters, station.AntennaHeightMeters)
 	result := link{
-		distanceMeters: distanceMeters, bearingDegrees: bearing, horizonMeters: horizon,
+		distanceMeters: distanceMeters, bearingDegrees: bearing, horizonMeters: horizon, shadowLossDB: sectorLoss,
 		receivedPowerDBm: power, effectiveSensitivityDBm: sensitivity, marginDB: power - sensitivity,
 	}
 	if station.Enabled && receiver.Enabled {
 		result.probability = marginProbability(result.marginDB) * horizonProbability(distanceMeters, horizon) * (1 - receiver.DropProbability)
 	}
 	return result
+}
+
+// receiver returns the station's capability on channel.
+func (d StationDefinition) receiver(channel Channel) ReceiverChannel {
+	if channel == ChannelB {
+		return d.ChannelB
+	}
+	return d.ChannelA
 }
 
 // horizonMeters is the radio horizon for two antenna heights in metres above
@@ -164,14 +173,10 @@ func shadowLoss(sectors []ShadowSector, bearing float64) float64 {
 // decide returns the outcome of l for a draw uniform in [0, 1). A transmission
 // is received iff draw < l.probability and no deterministic cause excludes it.
 func decide(station StationDefinition, channel Channel, l link, draw float64) outcome {
-	receiver := station.ChannelA
-	if channel == ChannelB {
-		receiver = station.ChannelB
-	}
 	switch {
 	case !station.Enabled:
 		return outcomeStationDisabled
-	case !receiver.Enabled:
+	case !station.receiver(channel).Enabled:
 		return outcomeChannelDisabled
 	case l.distanceMeters >= l.horizonMeters:
 		return outcomeOutsideHorizon

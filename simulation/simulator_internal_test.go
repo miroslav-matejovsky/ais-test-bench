@@ -57,18 +57,24 @@ func TestStationRangesExhaustBeforeMutation(t *testing.T) {
 // because valid public inputs always encode. A failed call must not change any
 // future result, so the engine is compared with an untouched control engine.
 func TestFailedMutationKeepsState(t *testing.T) {
-	s, err := New(internalConfig)
+	config := internalConfig
+	channel := ReceiverChannel{Enabled: true, SensitivityDBm: -110}
+	near := StationDefinition{Name: "Near", Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: channel}
+	config.Stations = []StationDefinition{near, near}
+	s, err := New(config)
 	require.NoError(t, err)
-	control, err := New(internalConfig)
+	control, err := New(config)
 	require.NoError(t, err)
 	requireSame := func(msgAndArgs ...any) {
 		t.Helper()
 		require.Equal(t, control.state, s.state, msgAndArgs...)
 		require.Equal(t, control.messages, s.messages, msgAndArgs...)
+		require.Equal(t, control.store, s.store, msgAndArgs...)
 	}
 
-	// Creation draws random values for the first added vessel, which encodes;
-	// the second MMSI exceeds nine digits. The random source must not advance.
+	// Creation draws random values for the first added vessel, which encodes and
+	// is received; the second MMSI exceeds nine digits. Neither the random source
+	// nor reception state may change.
 	s.state.nextMMSI = 999999999
 	reports, err := s.SetCount(4)
 	require.Error(t, err)

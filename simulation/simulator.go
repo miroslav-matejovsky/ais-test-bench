@@ -92,10 +92,12 @@ func (v *vesselState) channel() Channel {
 	return ChannelB
 }
 
-// state is all mutable engine state except history. A mutation copies it,
-// changes only the copy, and commits the copy with its reports after every step
-// succeeded, so a failure leaves no trace, including in future random draws.
+// state is all mutable engine state except history and reception state. A
+// mutation copies it, changes only the copy, stages its receptions, and commits
+// the copy with its reports and receptions after every step succeeded, so a
+// failure leaves no trace, including in future random draws.
 type state struct {
+	revision  uint64        // State revision, 1 after New.
 	source    mathrand.PCG  // Held by value so a staged copy draws independently.
 	vessels   []vesselState // Creation order.
 	nextMMSI  uint32
@@ -114,16 +116,18 @@ type state struct {
 // messages under one lock. Construct it with New. It starts no goroutine and
 // reads no clock.
 type Simulator struct {
-	// id, start, initialCount, and transmitter are immutable after New and read
-	// without the lock.
+	// id, start, seed, initialCount, and transmitter are immutable after New
+	// and read without the lock.
 	id           string
 	start        time.Time
+	seed         uint64
 	initialCount int
 	transmitter  TransmitterProfile
 
 	mu       sync.Mutex
 	state    state
 	messages []Message // Oldest first, at most MessageLimit.
+	store    receptionStore
 }
 
 // New validates config and starts a run with InitialVesselCount randomly
@@ -155,7 +159,7 @@ func New(config Config) (*Simulator, error) {
 		return nil, err
 	}
 	s := &Simulator{
-		id: config.ID, start: start, initialCount: config.InitialVesselCount,
+		id: config.ID, start: start, seed: config.Seed, initialCount: config.InitialVesselCount,
 		transmitter: config.Transmitter,
 		state: state{
 			source:  *mathrand.NewPCG(config.Seed, config.Seed^0xa15),
@@ -164,20 +168,24 @@ func New(config Config) (*Simulator, error) {
 			stations: stations, lastStationID: uint64(len(stations)), stationRevision: firstRevision,
 		},
 		messages: make([]Message, 0),
+		store:    newReceptionStore(stations),
 	}
 	if _, err := s.SetCount(config.InitialVesselCount); err != nil {
 		return nil, err
 	}
+	s.state.revision = firstRevision
 	return s, nil
 }
 
 // SetCount adjusts the active fleet at the current virtual time and returns the
-// creation reports of added vessels in creation order. Existing vessels keep
-// their identity, navigation, and report; new vessels move only from their birth
-// time. Removed vessels' history remains until evicted. An effective change sets
+// creation reports of added vessels in creation order. Every station evaluates
+// the creation reports. Existing vessels keep their identity, navigation, and
+// report; new vessels move only from their birth time. Removed vessels' history
+// and observations remain until evicted or expired. An effective change sets
 // Fleet.UpdatedAt; an unchanged count changes nothing. Tick scheduling is not
-// affected. Count must be 0 through MaxVessels (ErrInvalid). A failure returns
-// no reports and changes nothing.
+// affected. Count must be 0 through MaxVessels (ErrInvalid); an exhausted
+// sequence or revision range wraps ErrLimit. A failure returns no reports and
+// changes nothing.
 func (s *Simulator) SetCount(count int) ([]Message, error) {
 	if err := checkCount(count); err != nil {
 		return nil, err
@@ -188,6 +196,13 @@ func (s *Simulator) SetCount(count int) ([]Message, error) {
 	now := s.start.Add(next.elapsed)
 	added := count - len(next.vessels)
 	reports := make([]Message, 0, max(added, 0))
+	if added == 0 {
+		return reports, nil
+	}
+	if err := next.revise(); err != nil {
+		return nil, err
+	}
+	batch := s.stageReceptions(next.stations)
 	if added < 0 {
 		next.vessels = next.vessels[:count]
 		next.updatedAt = now
@@ -207,17 +222,20 @@ func (s *Simulator) SetCount(count int) ([]Message, error) {
 				Speed:     minSpeedKnots + float64(random.IntN(speedSteps))/10,
 				Course:    course, Heading: int(course), UpdatedAt: now,
 			}, name: fmt.Sprintf("Vessel %d", mmsi-firstMMSI+1), typeID: cargoTypeID}
-			report, err := next.emit(&vessel)
+			t, err := next.emit(&vessel)
 			if err != nil {
+				return nil, err
+			}
+			if err := s.receive(&batch, next.stations, t); err != nil {
 				return nil, err
 			}
 			next.vessels = append(next.vessels, vessel)
 			next.nextMMSI++
-			reports = append(reports, report)
+			reports = append(reports, t.Message)
 		}
 		next.updatedAt = now
 	}
-	s.commit(next, reports)
+	s.commit(next, reports, batch)
 	return reports, nil
 }
 
@@ -226,15 +244,17 @@ func (s *Simulator) SetCount(count int) ([]Message, error) {
 // already evicted from History. Every tick boundary after the current instant
 // and up to and including the target moves each vessel from its previous tick or
 // birth time to the boundary along a great circle and reports it, in creation
-// order. A target between boundaries advances the clock without a partial tick.
-// The clock and tick schedule also advance with an empty fleet. Advance works
-// while paused and keeps the Elapse scaling remainder.
+// order. Every station evaluates every report. A target between boundaries
+// advances the clock without a partial tick. The clock, tick schedule, and
+// observation ages also advance with an empty fleet. Advance works while paused
+// and keeps the Elapse scaling remainder.
 //
 // Zero is a no-op returning an empty slice. A negative duration wraps
 // ErrInvalid. More than MaxAdvance, a target after year 9999, or exhausted
-// duration or sequence range wraps ErrLimit. ctx is checked before the first
-// tick and between ticks; cancellation returns its error. Every failure returns
-// no reports and leaves the engine unchanged.
+// duration, sequence, reception sequence, or revision range wraps ErrLimit. ctx
+// is checked before the first tick, between ticks, and before commit;
+// cancellation returns its error. Every failure returns no reports and leaves
+// the engine unchanged, including reception state.
 func (s *Simulator) Advance(ctx context.Context, virtualDelta time.Duration) ([]Message, error) {
 	if virtualDelta < 0 {
 		return nil, fmt.Errorf("%w: virtual duration must not be negative: %v", ErrInvalid, virtualDelta)
@@ -270,7 +290,8 @@ func (s *Simulator) Elapse(ctx context.Context, realDelta time.Duration) ([]Mess
 // MaxSpeed in SpeedStep increments. Float values within binary rounding of a
 // step are normalized to it. Only future Elapse scaling changes; the clock, tick
 // schedule, reports, and carried remainder are kept, and no report is emitted.
-// Invalid values wrap ErrInvalid and change nothing.
+// Invalid values wrap ErrInvalid and an exhausted revision range wraps ErrLimit;
+// both change nothing.
 func (s *Simulator) SetSpeed(speed float64) error {
 	hundredths, err := normalizeSpeed(speed)
 	if err != nil {
@@ -278,6 +299,12 @@ func (s *Simulator) SetSpeed(speed float64) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if hundredths == s.state.speed {
+		return nil
+	}
+	if err := s.state.revise(); err != nil {
+		return err
+	}
 	s.state.speed = hundredths
 	return nil
 }
@@ -311,7 +338,15 @@ func (s *Simulator) advance(ctx context.Context, next state, delta time.Duration
 	if err := next.reserve(uint64(ticks) * uint64(len(next.vessels))); err != nil {
 		return nil, err
 	}
+	if delta > 0 {
+		if err := next.revise(); err != nil {
+			return nil, err
+		}
+	}
+	batch := s.stageReceptions(next.stations)
 	reports := make([]Message, 0, int(ticks)*len(next.vessels))
+	// One tick is a bounded chunk: at most MaxVessels reports, each evaluated at
+	// most MaxStations times.
 	for tick := first; tick <= last; tick++ {
 		if tick > first {
 			if err := ctx.Err(); err != nil {
@@ -322,16 +357,22 @@ func (s *Simulator) advance(ctx context.Context, next state, delta time.Duration
 		for i := range next.vessels {
 			vessel := &next.vessels[i]
 			move(&vessel.Position, at)
-			report, err := next.emit(vessel)
+			t, err := next.emit(vessel)
 			if err != nil {
 				return nil, err
 			}
-			reports = append(reports, report)
+			if err := s.receive(&batch, next.stations, t); err != nil {
+				return nil, err
+			}
+			reports = append(reports, t.Message)
 		}
 		next.updatedAt = at
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("advance simulation: %w", err)
+	}
 	next.elapsed = target
-	s.commit(next, reports)
+	s.commit(next, reports, batch)
 	return reports, nil
 }
 
@@ -351,14 +392,16 @@ func (s *Simulator) stage() state {
 	return next
 }
 
-// commit publishes a successful mutation: it replaces the state and appends
-// reports to history, evicting the oldest beyond MessageLimit.
-func (s *Simulator) commit(next state, reports []Message) {
+// commit publishes a successful mutation: it replaces the state, appends
+// reports to history, evicting the oldest beyond MessageLimit, and applies the
+// staged receptions at the committed instant. It cannot fail.
+func (s *Simulator) commit(next state, reports []Message, batch receptionBatch) {
 	s.state = next
 	s.messages = append(s.messages, reports...)
 	if excess := len(s.messages) - MessageLimit; excess > 0 {
 		s.messages = append(s.messages[:0], s.messages[excess:]...)
 	}
+	s.applyReceptions(next.stations, batch, s.start.Add(next.elapsed))
 }
 
 // reserve fails when n more reports would exhaust the sequence range.
@@ -369,17 +412,31 @@ func (st *state) reserve(n uint64) error {
 	return nil
 }
 
+// revise increments the state revision, failing when its range is exhausted.
+func (st *state) revise() error {
+	if st.revision == math.MaxUint64 {
+		return fmt.Errorf("%w: state revision range exhausted", ErrLimit)
+	}
+	st.revision++
+	return nil
+}
+
 // emit encodes the current position of v on its next channel with the next
-// staged sequence and makes it the vessel's latest report.
-func (st *state) emit(v *vesselState) (Message, error) {
-	sentence, err := ais.EncodePosition(v.Position, ais.Channel(v.channel()))
+// staged sequence, makes it the vessel's latest report, and returns it with
+// the data reception needs.
+func (st *state) emit(v *vesselState) (transmission, error) {
+	channel := v.channel()
+	sentence, err := ais.EncodePosition(v.Position, ais.Channel(channel))
 	if err != nil {
-		return Message{}, fmt.Errorf("encode vessel %d: %w", v.MMSI, err)
+		return transmission{}, fmt.Errorf("encode vessel %d: %w", v.MMSI, err)
 	}
 	st.sequence++
 	v.reports++
 	v.report = Message{Sequence: st.sequence, MMSI: v.MMSI, Timestamp: v.UpdatedAt, Sentence: sentence}
-	return v.report, nil
+	return transmission{
+		Message: v.report, channel: channel, latitude: v.Latitude, longitude: v.Longitude,
+		name: v.name, typeID: v.typeID,
+	}, nil
 }
 
 func checkCount(count int) error {
@@ -438,8 +495,13 @@ func (s *Simulator) History() History {
 // the settings the engine actually uses.
 func (s *Simulator) Metadata() Metadata {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.metadata()
+}
+
+// metadata builds Metadata. Called with the lock held.
+func (s *Simulator) metadata() Metadata {
 	elapsed, speed := s.state.elapsed, s.state.speed
-	s.mu.Unlock()
 	return Metadata{
 		SimulationID: s.id,
 		StartedAt:    s.start,
@@ -471,6 +533,12 @@ func (s *Simulator) Metadata() Metadata {
 				ZeroProbabilityMarginDB: zeroProbabilityMarginDB, ReferenceProbability: referenceProbability,
 				FullProbabilityMarginDB: fullProbabilityMarginDB,
 				CoverageThresholds:      slices.Clone(coverageThresholds),
+			},
+			Observation: ObservationSettings{
+				ReceptionHistoryLimit: ReceptionHistoryLimit, TargetLimit: TargetLimit,
+				RecentReceptionLimit: RecentReceptionLimit,
+				FreshAgeMs:           FreshAge.Milliseconds(), StaleAgeMs: StaleAge.Milliseconds(),
+				ExpiryAgeMs: ExpiryAge.Milliseconds(), RateWindowMs: RateWindow.Milliseconds(),
 			},
 		},
 	}

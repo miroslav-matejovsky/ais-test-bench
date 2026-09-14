@@ -4,8 +4,9 @@
 //	import "github.com/miroslav-matejovsky/ais-test-bench/simulation"
 //
 // It owns synthetic vessels, their latest AIS reports, a bounded in-memory AIS
-// history, and a virtual clock. A seeded random source creates cargo vessels in
-// the North Sea that move at their reported speed and course.
+// history, receiving stations with their receptions and observed targets, and a
+// virtual clock. A seeded random source creates cargo vessels in the North Sea
+// that move at their reported speed and course.
 //
 // # Configuration
 //
@@ -50,8 +51,7 @@
 //
 // Receive decisions hash the run seed, station ID, RF revision, and
 // transmission sequence into a uniform draw, so they never consume vessel
-// randomness and do not depend on batching or station order. Wiring decisions
-// into generated reports is future work.
+// randomness and do not depend on batching or station order.
 //
 // Station.Coverage holds 0.9 and 0.5 probability contours per channel for
 // Settings.Transmitter, computed with the same function whenever the RF
@@ -62,6 +62,44 @@
 // ErrConflict for a stale expected revision, ErrNotFound for an unknown ID, and
 // ErrLimit for MaxStations or an exhausted ID or revision range. Validation and
 // all checks complete before any change.
+//
+// # Receptions and observations
+//
+// Three identities stay separate. A transmission is one generated report,
+// identified by Message.Sequence, whether any station receives it or not. A
+// Reception is one station's successful decoding of a transmission, identified
+// by station ID and a per-station sequence that starts at 1 and stays
+// contiguous across RF edits. A target is one MMSI with the latest reception of
+// every station that received it. A Reception carries the exact sentence, the
+// full virtual timestamp (receive latency is not modelled), model diagnostics,
+// the station RF configuration, and scenario attribution, so it stays
+// meaningful after its transmission leaves History.
+//
+// Every generated report, including creation reports, is one opportunity at
+// every configured station, including disabled ones. ReceptionCounters count
+// opportunities since station creation by exclusive outcome and by channel;
+// RecentCounters count the last RateWindow in one-second buckets. Counters
+// survive RF edits, and Station.RFUpdatedAt tells whether a window spans RF
+// revisions.
+//
+// Observations is one consistent snapshot: clock, settings, stations with
+// counters, selected targets, recent receptions, and totals. A target's
+// navigation is the newest report a selected station actually received, so a
+// missed report never moves it, and it stays after its vessel leaves the fleet.
+// Several selected stations produce one target with the highest transmission
+// sequence, from the first station in creation order on ties, and mark which
+// stations received that transmission. Ages are virtual: fresh up to FreshAge,
+// stale up to StaleAge, then lost. Clock mutations remove observations at
+// ExpiryAge, also with an empty fleet; ages freeze while paused. The store
+// holds at most TargetLimit MMSIs and evicts the target whose newest reception
+// is oldest, lowest MMSI first, counting Observations.TargetEvictions.
+// RemoveStation removes the station's counters, history, and observations.
+//
+// ReceptionHistory pages through the newest ReceptionHistoryLimit receptions
+// of one station. Unlike the complete batches SetCount, Advance, and Elapse
+// return, it is finite: a cursor that falls behind it reports a Gap. Expiry and
+// eviction never remove history, and Observations rebuilds the live view after
+// any gap.
 //
 // # Virtual time
 //
@@ -94,10 +132,15 @@
 // # Atomicity and concurrency
 //
 // Each mutation stages all state, including the random source, navigation,
-// sequence, clock, and scaling remainder, and commits only after every report
-// encoded and every context check passed. A failed call returns no reports and
-// changes no future result. Errors wrap ErrInvalid for rejected input and
-// ErrLimit for exceeded limits. One mutex makes all methods safe for concurrent
-// use, but reproducible output requires callers to order their mutations.
-// Fleet, History, Metadata, Stations, and returned values are detached copies.
+// sequence, clock, scaling remainder, reception counters and sequences, and new
+// receptions. It commits only after every report encoded, every station
+// evaluated, every limit and context check passed; applying the staged
+// receptions cannot fail. A failed call returns no reports and changes no
+// future result, including reception decisions, observation ages, and
+// sequences. Observations.StateRevision increases with every effective commit.
+// Errors wrap ErrInvalid for rejected input and ErrLimit for exceeded limits.
+// One mutex makes all methods safe for concurrent use, but reproducible output
+// requires callers to order their mutations. Fleet, History, Metadata,
+// Stations, Observations, ReceptionHistory, and returned values are detached
+// copies.
 package simulation

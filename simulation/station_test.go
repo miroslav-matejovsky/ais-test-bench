@@ -112,12 +112,12 @@ func TestStationValidationRejectsInvalidDefinitions(t *testing.T) {
 			require.Nil(t, s)
 
 			s = newSimulator(t, testConfig(1, 1))
-			before := observe(s)
+			before := observe(t, s)
 			_, _, err = s.AddStation(1, definition)
 			require.ErrorIs(t, err, simulation.ErrInvalid)
 			_, err = s.UpdateStation(1, "station-1", definition)
 			require.ErrorIs(t, err, simulation.ErrInvalid)
-			require.Equal(t, before, observe(s))
+			require.Equal(t, before, observe(t, s))
 		})
 	}
 }
@@ -334,7 +334,7 @@ func TestStationLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "station-4", id, "IDs are never reused")
 
-	before := observe(s)
+	before := observe(t, s)
 	_, err = s.RemoveStation(3, "station-1")
 	require.ErrorIs(t, err, simulation.ErrConflict)
 	_, _, err = s.AddStation(5, site("Stale"))
@@ -345,7 +345,7 @@ func TestStationLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, simulation.ErrNotFound)
 	_, err = s.UpdateStation(4, "station-3", site("Missing"))
 	require.ErrorIs(t, err, simulation.ErrNotFound)
-	require.Equal(t, before, observe(s))
+	require.Equal(t, before, observe(t, s))
 
 	// Editing keeps ID and creation time; the station keeps its list position.
 	stations, err = s.UpdateStation(4, "station-1", site("Renamed"))

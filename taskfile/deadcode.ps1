@@ -30,12 +30,20 @@ $allow = @(
     'Driver.RemoveStation'
     'Driver.Stations'
     'Driver.prepareStationEdit'
-    # Staged reception decisions, reachable once generated reports are evaluated
-    # at stations (docs/plans/multiple-base-stations step 03). Temporary.
-    'evaluateLink'
-    'decide'
-    'receptionDraw'
-    'geodesic'
+    'receptionStore.removeStation'
+    # Staged observation reads, reachable once the simulator HTTP API adds
+    # observation and reception history routes (docs/plans/multiple-base-stations
+    # step 04). Temporary.
+    'Simulator.Observations'
+    'Simulator.ReceptionHistory'
+    'Simulator.selectStations'
+    'Simulator.observedTarget'
+    'Simulator.recentReceptions'
+    'stationReceptions.observation'
+    'stationReceptions.at'
+    'Reception.detach'
+    'targetStatus'
+    'ratio'
 )
 
 $out = deadcode ./cmd/... 2>&1

@@ -264,6 +264,78 @@ func ExampleSimulator_AddStation() {
 	// removed station: true
 }
 
+// Observations contains only what stations received. The second station drops
+// every channel B report, so its view of the vessel stays at the creation
+// report while the first station follows every report.
+func ExampleSimulator_Observations() {
+	ctx := context.Background()
+	channel := simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -110}
+	dropB := channel
+	dropB.DropProbability = 1
+	sim, err := simulation.New(simulation.Config{
+		ID:                 "test-run",
+		StartTime:          time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+		Seed:               42,
+		InitialVesselCount: 1,
+		Speed:              1,
+		Transmitter:        transmitter,
+		Stations: []simulation.StationDefinition{
+			{Name: "Coast", Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: channel},
+			{Name: "No channel B", Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: dropB},
+		},
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if _, err := sim.Advance(ctx, time.Second); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	all, err := sim.Observations(nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("transmissions %d, received transmissions %d, receptions %d\n", all.Transmissions, all.ReceivedTransmissions, all.Receptions)
+	for _, station := range all.Stations {
+		c := station.Counters
+		fmt.Printf("%s %q: opportunities %d, received %d, probabilistic loss %d\n",
+			station.Station.ID, station.Station.Definition.Name, c.Opportunities, c.Received, c.ProbabilisticLoss)
+	}
+	target := all.Targets[0]
+	fmt.Printf("all stations: vessel %d at transmission %d from %s, %s\n",
+		target.MMSI, target.Report.TransmissionSequence, target.Report.StationID, target.Status)
+	for _, observed := range target.Stations {
+		fmt.Printf("  %s last received transmission %d, chosen %t\n", observed.StationID, observed.TransmissionSequence, observed.Chosen)
+	}
+
+	only, err := sim.Observations([]string{"station-2"})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("station-2 only: transmission %d\n", only.Targets[0].Report.TransmissionSequence)
+	page, err := sim.ReceptionHistory("station-2", nil, 10)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, r := range page.Receptions {
+		fmt.Printf("station-2 reception %d: transmission %d on channel %s\n", r.Sequence, r.TransmissionSequence, r.Channel)
+	}
+	// Output:
+	// transmissions 2, received transmissions 2, receptions 3
+	// station-1 "Coast": opportunities 2, received 2, probabilistic loss 0
+	// station-2 "No channel B": opportunities 2, received 1, probabilistic loss 1
+	// all stations: vessel 200000000 at transmission 2 from station-1, fresh
+	//   station-1 last received transmission 2, chosen true
+	//   station-2 last received transmission 1, chosen false
+	// station-2 only: transmission 1
+	// station-2 reception 1: transmission 1 on channel A
+}
+
 // A complete run through explicit virtual steps, scaled real time, and pause.
 func ExampleSimulator() {
 	ctx := context.Background()
