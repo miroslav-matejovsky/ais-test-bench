@@ -10,10 +10,10 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/app"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/cli"
 )
 
 const defaultAddr = "localhost:8000"
@@ -46,10 +46,8 @@ func run(args []string, logger *slog.Logger) error {
 }
 
 // parseAddr parses the command-line arguments. The only flag is -addr, the
-// HTTP listen address as host:port. It defaults to defaultAddr. The host is
-// required: an empty host binds all interfaces, which triggers firewall
-// prompts on Windows. The port must be 1-65535. Usage and flag errors are
-// printed to output.
+// public HTTP listen address as host:port, validated by cli.ValidateListenAddr.
+// It defaults to defaultAddr. Usage and flag errors are printed to output.
 func parseAddr(args []string, output io.Writer) (string, error) {
 	fs := flag.NewFlagSet("ais-test-bench", flag.ContinueOnError)
 	fs.SetOutput(output)
@@ -60,20 +58,8 @@ func parseAddr(args []string, output io.Writer) (string, error) {
 	if fs.NArg() > 0 {
 		return "", fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
-
-	host, portText, err := net.SplitHostPort(*addr)
-	if err != nil {
-		return "", fmt.Errorf("invalid -addr %q: %w", *addr, err)
-	}
-	if host == "" {
-		return "", fmt.Errorf("invalid -addr %q: host is required, e.g. %s", *addr, defaultAddr)
-	}
-	port, err := strconv.Atoi(portText)
-	if err != nil {
-		return "", fmt.Errorf("invalid -addr %q: port: %w", *addr, err)
-	}
-	if port < 1 || port > 65535 {
-		return "", fmt.Errorf("invalid -addr %q: port %d out of range 1-65535", *addr, port)
+	if err := cli.ValidateListenAddr(*addr); err != nil {
+		return "", fmt.Errorf("-addr: %w", err)
 	}
 	return *addr, nil
 }

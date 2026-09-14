@@ -3,6 +3,7 @@
     const apply = document.getElementById("apply-count");
     const status = document.getElementById("fleet-status");
     const saveStatus = document.getElementById("save-status");
+    const messages = document.getElementById("messages");
     let initialized = false;
     let saving = false;
 
@@ -11,8 +12,16 @@
         if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
         return response.json();
     }
-    function showFleet(data) {
-        status.textContent = `${data.vessels.length} active vessel(s) | ${data.messageCount} / ${data.messageLimit} messages stored`;
+    function showFleet(fleet) {
+        status.textContent = `${fleet.vessels.length} active vessel(s) | ${fleet.messageCount} / ${fleet.messageLimit} messages stored`;
+    }
+    // Input limits come from metadata; the server still validates every count.
+    function applyMetadata(metadata) {
+        const { maxVessels, messageHistoryLimit } = metadata.settings;
+        input.max = maxVessels;
+        document.getElementById("count-range").textContent = `(0-${maxVessels})`;
+        document.getElementById("history-note").textContent =
+            `The latest ${messageHistoryLimit.toLocaleString()} reports are held in memory. The last 10 are shown here.`;
     }
     document.getElementById("vessel-form").addEventListener("submit", async event => {
         event.preventDefault();
@@ -21,12 +30,12 @@
         apply.disabled = true;
         saveStatus.textContent = "Saving...";
         try {
-            const data = await request("/api/vessels", {
+            const fleet = await request("/api/vessels", {
                 method: "PUT", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ count: Number(input.value) }),
             });
-            showFleet(data);
-            saveStatus.textContent = `Vessel count set to ${data.vessels.length}.`;
+            showFleet(fleet);
+            saveStatus.textContent = `Vessel count set to ${fleet.vessels.length}.`;
         } catch (error) {
             saveStatus.textContent = `Could not save: ${error.message}`;
         } finally {
@@ -37,16 +46,20 @@
 
     async function refresh() {
         try {
-            const [data, messages] = await Promise.all([request("/api/vessels"), request("/api/messages")]);
-            if (!saving) showFleet(data);
-            if (!initialized) {
-                input.value = data.vessels.length;
+            const [fleet, history, metadata] = await Promise.all([
+                request("/api/vessels"), request("/api/messages"), initialized ? null : request("/api/metadata"),
+            ]);
+            if (!saving) showFleet(fleet);
+            if (metadata) {
+                applyMetadata(metadata);
+                input.value = fleet.vessels.length;
                 input.disabled = false;
                 apply.disabled = false;
                 initialized = true;
             }
-            document.getElementById("messages").textContent = messages.slice(-10).reverse()
-                .map(message => `${new Date(message.timestamp).toLocaleTimeString()}  MMSI ${message.mmsi}  ${message.sentence.trim()}`)
+            // Sentences keep their CRLF in the API; it is trimmed only for display.
+            messages.textContent = history.messages.slice(-10).reverse()
+                .map(message => `${new Date(message.timestamp).toLocaleTimeString()}  #${message.sequence}  MMSI ${message.mmsi}  ${message.sentence.trim()}`)
                 .join("\n") || "No messages stored.";
         } catch (error) {
             status.textContent = `Updates unavailable (${error.message}). Retrying...`;

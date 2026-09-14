@@ -10,71 +10,105 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
 )
 
-const (
-	readHeaderTimeout = 5 * time.Second
-	shutdownTimeout   = 5 * time.Second
-)
+// internalAddr is the private simulator API listener of combined mode. The OS
+// assigns the port, independent of the public address.
+const internalAddr = "127.0.0.1:0"
 
-// Run serves the UI on ln until ctx is cancelled, then waits up to
-// shutdownTimeout for in-flight requests. Run takes ownership of ln and closes
-// it. It returns nil after a clean shutdown.
-func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) (runErr error) {
-	simulator, err := simulation.New(time.Now(), rand.Uint64())
+// Run serves the combined test bench on the public listener ln until ctx is
+// cancelled or any component fails. It runs one simulation engine, serves its
+// API publicly and on a private loopback listener, and gives the display a
+// simulator HTTP client for that private listener, so the display reads the
+// engine over HTTP exactly as in separate mode.
+//
+// Run takes ownership of ln and closes it, also when construction fails. It
+// returns nil after a clean shutdown.
+func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
+	internalLn, err := net.Listen("tcp", internalAddr)
 	if err != nil {
-		return errors.Join(fmt.Errorf("create simulation: %w", err), ln.Close())
+		return errors.Join(fmt.Errorf("listen for internal simulator API: %w", err), ln.Close())
 	}
-	handler, err := ui.NewHandler(logger, simulator)
+	return serve(ctx, logger, ln, internalLn)
+}
+
+// serve runs the combined components with ln as the public listener and
+// internalLn as the private simulator API listener. It owns and closes both.
+func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener) error {
+	fail := func(err error) error {
+		return errors.Join(err, ln.Close(), internalLn.Close())
+	}
+	sim, err := simulation.New(simulation.NewID(), time.Now(), rand.Uint64())
 	if err != nil {
-		return errors.Join(fmt.Errorf("create ui handler: %w", err), ln.Close())
+		return fail(fmt.Errorf("create simulation: %w", err))
+	}
+	client, err := display.NewClient("http://" + internalLn.Addr().String())
+	if err != nil {
+		return fail(fmt.Errorf("create display client: %w", err))
+	}
+	pages, err := ui.NewPages(logger, []ui.Link{{Href: "/manager", Label: "Manager"}, {Href: "/display", Label: "Display"}})
+	if err != nil {
+		return fail(fmt.Errorf("create pages: %w", err))
 	}
 
-	srv := &http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
-	}
+	simulatorAPI := simulator.NewAPI(logger, sim)
+	internal := http.NewServeMux()
+	internal.Handle("/api/", simulatorAPI)
+	public := http.NewServeMux()
+	public.Handle("/api/", simulatorAPI)
+	public.Handle("/display/api/", display.NewAPI(logger, client))
+	public.Handle("GET /static/", ui.Static())
+	public.HandleFunc("GET /{$}", pages.Home)
+	public.HandleFunc("GET /manager", pages.Manager)
+	public.HandleFunc("GET /display", pages.Display)
+	public.HandleFunc("GET /status", pages.Status)
 
-	serveErr := make(chan error, 1)
-	go func() {
-		// Serve closes ln when it returns.
-		serveErr <- srv.Serve(ln)
-	}()
-	logger.Info("server started", "url", "http://"+ln.Addr().String())
+	// Both listeners are bound, so display requests can reach the internal API
+	// as soon as public serving starts.
+	internalServer := httpserver.Serve(logger, internalLn, internal)
+	publicServer := httpserver.Serve(logger, ln, public)
+	logger.Info("ais-test-bench started", "url", "http://"+ln.Addr().String(), "internalAPI", client.Origin())
 	simulationCtx, stopSimulation := context.WithCancel(ctx)
 	simulationDone := make(chan struct{})
 	var simulationErr error // Read only after simulationDone closes.
 	go func() {
-		simulationErr = simulator.Run(simulationCtx)
+		simulationErr = sim.Run(simulationCtx)
 		close(simulationDone)
-	}()
-	defer func() {
-		stopSimulation()
-		<-simulationDone
-		if simulationErr != nil {
-			runErr = errors.Join(runErr, fmt.Errorf("run simulation: %w", simulationErr))
-		}
 	}()
 
 	select {
-	case err := <-serveErr:
-		return fmt.Errorf("serve http: %w", err)
+	case <-publicServer.Done():
+	case <-internalServer.Done():
 	case <-simulationDone:
 	case <-ctx.Done():
 	}
 
-	logger.Info("server shutting down")
-	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+	// Public requests drain first while the internal API still answers their
+	// simulator reads. One budget bounds the whole shutdown.
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpserver.ShutdownTimeout)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return errors.Join(fmt.Errorf("shutdown http: %w", err), srv.Close())
+	err = wrap("public server", publicServer.Shutdown(shutdownCtx))
+	client.CloseIdleConnections()
+	err = errors.Join(err, wrap("internal simulator API server", internalServer.Shutdown(shutdownCtx)))
+	stopSimulation()
+	<-simulationDone
+	err = errors.Join(err, wrap("run simulation", simulationErr))
+	if err != nil {
+		return err
 	}
-	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve http: %w", err)
-	}
-	logger.Info("server stopped")
+	logger.Info("ais-test-bench stopped")
 	return nil
+}
+
+// wrap adds context to a non-nil error.
+func wrap(context string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", context, err)
 }

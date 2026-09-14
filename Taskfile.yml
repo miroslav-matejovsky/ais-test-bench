@@ -78,13 +78,32 @@ tasks:
     cmds:
       - go run ./cmd/ais-test-bench -addr localhost:8000
 
-# ---- maintenance tasks ----
-
-  deps:
-    desc: List direct dependencies with available updates
+  run:simulator:
+    desc: Start the standalone simulator (API and manager) on http://localhost:8000
     silent: true
     cmds:
-      - go list -u -m -f "{{`{{if not .Indirect}}{{.}}{{end}}`}}" all
+      - go run ./cmd/simulator -addr localhost:8000
+
+  run:display:
+    desc: Start the standalone display on http://localhost:8081, reading the simulator at http://localhost:8000
+    silent: true
+    cmds:
+      - go run ./cmd/display -addr localhost:8081 -simulator-url http://localhost:8000
+
+# ---- maintenance tasks ----
+
+  vendor:
+    desc: Re-sync the committed vendor/ tree after changing dependencies (tidy + vendor)
+    silent: true
+    cmds:
+      - pwsh -NoProfile -NonInteractive -File taskfile/vendor.ps1
+
+  deps:
+    desc: List direct dependencies with available updates, after updating go.mod run 'task vendor' to re-sync the vendor tree
+    silent: true
+    cmds:
+      - go mod tidy
+      - go list -mod=readonly -u -m -f "{{`{{if not .Indirect}}{{.}}{{end}}`}}" all
 
   go-tools:
     desc: Install or update required Go tools

@@ -13,8 +13,9 @@
     <header>
         <a href="/">AIS Test Bench</a>
         <nav>
-            <a href="/manager">Manager</a>
-            <a href="/display">Display</a>
+            {{- range nav}}
+            <a href="{{.Href}}">{{.Label}}</a>
+            {{- end}}
         </nav>
     </header>
     <main>

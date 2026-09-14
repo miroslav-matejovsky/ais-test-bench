@@ -16,9 +16,9 @@ type renderer struct {
 }
 
 // newRenderer parses sharedFiles (glob patterns) from templateFS into the
-// shared template set.
-func newRenderer(templateFS fs.FS, sharedFiles ...string) (*renderer, error) {
-	shared, err := template.New("").ParseFS(templateFS, sharedFiles...)
+// shared template set. Funcs are available to shared and page templates.
+func newRenderer(templateFS fs.FS, funcs template.FuncMap, sharedFiles ...string) (*renderer, error) {
+	shared, err := template.New("").Funcs(funcs).ParseFS(templateFS, sharedFiles...)
 	if err != nil {
 		return nil, fmt.Errorf("parse shared templates %v: %w", sharedFiles, err)
 	}
