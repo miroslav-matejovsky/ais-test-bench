@@ -34,6 +34,12 @@ func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
 	if err != nil {
 		return errors.Join(fmt.Errorf("listen for internal simulator API: %w", err), ln.Close())
 	}
+	return serve(ctx, logger, ln, internalLn)
+}
+
+// serve runs the combined components with ln as the public listener and
+// internalLn as the private simulator API listener. It owns and closes both.
+func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener) error {
 	fail := func(err error) error {
 		return errors.Join(err, ln.Close(), internalLn.Close())
 	}

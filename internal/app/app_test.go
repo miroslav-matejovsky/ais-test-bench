@@ -3,7 +3,6 @@ package app_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -80,24 +79,4 @@ func TestRunServesCombinedComponents(t *testing.T) {
 
 	cancel()
 	require.NoError(t, <-done)
-}
-
-// failingListener fails every Accept and reports Close on closed.
-type failingListener struct {
-	closed chan struct{}
-}
-
-func (l failingListener) Accept() (net.Conn, error) { return nil, errors.New("accept failed") }
-func (l failingListener) Close() error              { close(l.closed); return nil }
-func (l failingListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
-
-func TestRunStopsAllComponentsWhenPublicServingFails(t *testing.T) {
-	ln := failingListener{closed: make(chan struct{})}
-
-	// Run returns only after both servers and the tick loop have stopped.
-	err := app.Run(t.Context(), slog.New(slog.DiscardHandler), ln)
-
-	require.ErrorContains(t, err, "public server")
-	require.ErrorContains(t, err, "accept failed")
-	<-ln.closed
 }

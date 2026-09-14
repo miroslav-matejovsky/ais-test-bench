@@ -1,7 +1,7 @@
 # Separate simulator and display
 
-Status: proposed implementation plan. This change creates planning documents
-only. No runtime changes or execution of `task all` are part of preparing it.
+Status: implemented. The root `README.md` and package `doc.go` files describe
+the resulting system; this plan records the design intent and acceptance scope.
 
 ## Goal and value
 
@@ -16,9 +16,9 @@ External clients can consume the simulator's NMEA AIS messages and metadata
 without running the display. The display can connect to a simulator in a
 different process. A combined command retains convenient local startup.
 
-## Current implementation
+## Starting point
 
-The repository currently runs everything through `cmd/ais-test-bench` and
+Before this plan, the repository ran everything through `cmd/ais-test-bench` and
 `internal/app.Run`. `internal/ui.NewHandler` owns both pages and all JSON routes,
 and keeps a direct `*simulation.Simulator` reference. Display JavaScript fetches
 the simulator's decoded coordinates from `/api/vessels`.

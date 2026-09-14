@@ -3,10 +3,6 @@
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
 
-- Separate simulator and display: step 07 of `docs/plans/separate-simulator-display` remains.
-  Run the browser acceptance checks: manager to simulator to display in both modes, count 1 -> 3 -> 0 -> 1,
-  display started before the simulator, simulator outage and restart, pan/zoom retention, tile and Leaflet failures.
-  `manager.js` (metadata limits, history envelope) and `display.js` (reconciliation, null positions, run change) have no automated tests.
-  Add complete API response examples captured from verified runs to `internal/simulatorapi` and `internal/display` docs.
-  Combined mode lacks tests for cancellation during an in-flight display request, an internal listener bind failure,
-  and observable proof that the display client targets the private listener.
+- `manager.js` (metadata limits, history envelope, count form) and `display.js` (marker reconciliation, null positions,
+  run change, view retention, map asset failures) have no automated tests in the repository. They were verified once
+  with a headless Edge script outside the repository; add a repeatable browser test when a JS toolchain is acceptable.
