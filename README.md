@@ -108,6 +108,15 @@ At 100 vessels and 100x the simulator emits 10,000 reports per real second, so
 the 1,000 retained reports cover about 0.1 real seconds. HTTP clients detect
 missed reports from sequence gaps; Go programs receive complete batches.
 
+The published limits are measured, not assumed. On an Intel Core Ultra 7 265H
+with Go 1.27.1, one virtual second at 100 vessels and 16 stations that receive
+every report takes about 2.1 ms with full histories and 1,000 observed targets,
+and 7.9 ms when all 100 MMSIs are replaced every second. Both stay below the
+10 ms that 100x allows. The largest observation snapshot, 16 stations and 1,000
+targets, encodes to 5.2 MiB, under the display's 8 MiB bound; one display request
+at that size takes about 180 ms. Rerun with
+`go test ./simulation ./internal/app -run '^$' -bench . -benchmem`.
+
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
 removes active vessels while preserving retained reports. Setting the count to
 zero stops message generation. Restarting resets the fleet and all history and

@@ -1,9 +1,10 @@
 # Multiple AIS base stations
 
-Status: in progress. Prepared 2026-09-14. Steps 01 (station configuration), 02
-(reception and coverage model), 03 (engine observations), 04 (simulator API
-and manager controls), 05 (display backend), and 06 (display interface) are
-implemented; step 07 is future work.
+Status: implemented, awaiting user acceptance. Prepared 2026-09-14. Steps 01
+(station configuration), 02 (reception and coverage model), 03 (engine
+observations), 04 (simulator API and manager controls), 05 (display backend),
+06 (display interface), and 07 (verification and documentation) are implemented.
+Manual verification by the user remains before this folder is removed.
 The "Current implementation" section describes the code before step 01. As a
 proof of concept, the model has no version: it is replaced in place when it
 changes, and its parameters are fixed engine constants published in metadata.

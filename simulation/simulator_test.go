@@ -413,6 +413,7 @@ func TestSplitCallsMatchCombined(t *testing.T) {
 			{elapse(10 * time.Second)},
 			{elapse(4 * time.Second), advance(0), elapse(6 * time.Second)},
 			{setSpeed(0.5), elapse(20 * time.Second), setSpeed(1)},
+			{setSpeed(100), elapse(30 * ms), elapse(70 * ms), setSpeed(1)},
 			{advance(4 * time.Second), setSpeed(0), elapse(time.Hour), advance(time.Second), setSpeed(1), elapse(5 * time.Second)},
 		},
 		"count change at five seconds": {

@@ -49,6 +49,25 @@
 // probability 0. Metadata.Settings.Reception publishes every parameter. The
 // values are empirical test-bench choices, not calibrated predictions.
 //
+// Sources for the reference terms, not for the empirical choices:
+//   - AIS 1 is 161.975 MHz and AIS 2 is 162.025 MHz:
+//     https://navcen.uscg.gov/international-vhf-marine-radio-channels-freq
+//   - Free-space loss 32.4 + 20 log10(f MHz) + 20 log10(d km) dB, ITU-R P.525-5
+//     section 2.3: https://www.itu.int/dms_pubrec/itu-r/rec/p/R-REC-P.525-5-202411-I!!PDF-E.pdf
+//   - Receiver sensitivity is a 20% packet error rate test point, not a hard
+//     threshold, ITU-R M.1371-6 Annex 2 Table 7:
+//     https://www.itu.int/rec/R-REC-M.1371-6-202602-I/en
+//   - Coverage depends on both antenna heights, installation losses, and
+//     obstructions, IALA G1111-2 sections 3.3 and 3.4:
+//     https://www.iala.int/product/g1111-2/?download=true
+//   - Class A nominal power 12.5 W: https://www.navcen.uscg.gov/ais-class-a-reports
+//
+// Assumptions of this model: the radio horizon uses k = 4/3, about
+// 4.12 * (sqrt(h_tx) + sqrt(h_rx)) km with heights in metres; the site loss,
+// path exponent, probability knots, and horizon taper are chosen so that
+// sensitivity, gain, and height differences stay visible inside the horizon.
+// Terrain, multipath, ducting, interference, and slot collisions are not modelled.
+//
 // Receive decisions hash the run seed, station ID, RF revision, and
 // transmission sequence into a uniform draw, so they never consume vessel
 // randomness and do not depend on batching or station order.

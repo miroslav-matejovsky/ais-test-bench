@@ -7,6 +7,8 @@ complexity: "medium"
 
 # Integration verification, performance, and documentation
 
+Status: implemented; manual browser verification by the user is pending.
+
 ## Outcome
 
 Prove that station differences reach the display through the public HTTP boundary,
@@ -106,3 +108,81 @@ work in root `.todo` as required by repository instructions.
 - Implemented documentation matches final APIs and model assumptions.
 - `task all` passes for implementation; user accepts the completed behavior before
   the plan folder is removed under `docs/plans/README.md` guidance.
+
+## Implementation record
+
+### Scenario coverage
+
+| Scenario | Automated coverage |
+| --- | --- |
+| Overlap, different capabilities, outside all coverage, channel B failure, lost update, receiver diversity, disable/re-enable, deleted selected site | `internal/app/scenario_test.go`: one seeded engine behind the simulator API over HTTP, read by the display API through its HTTP client. Every link has probability 1 or 0, so no assertion depends on a draw. It also asserts the display reads only observation and reception routes. |
+| Lost update, aggregate provenance | `simulation` `TestMissedReportKeepsLastReceivedPosition`; display `api_test.go` fixtures |
+| Shadow sector | `TestShadowLoss`, `TestCoverageSectorsAndEmptyContours` |
+| Create/move/edit/delete | `TestStationLifecycle`, `TestStationEditsBetweenTicks`, `TestStationHTTPCommandsAndObservations` |
+| Empty fleet ages to expiry, pause freezes age | `TestObservationAging` |
+| History pressure | `TestReceptionHistoryPaging`, `TestReceptionHistoryRollover`, display gap tests |
+| Target capacity | `TestTargetCapacityEviction`, `TestExpiryBeforeCapacityIsSplitIndependent` |
+| Pause and 100x | `TestSplitCallsMatchCombined` now includes speed 100 in split real-time calls |
+| Cancellation and invalid commands | `TestCancellationBeforeCommitRollsBack`, `TestFailedAdvancesChangeNothing`, driver rejection tests |
+| Upstream failure/restart | display API status tests; browser checklist from step 06 |
+| Separate processes | standalone `internal/display` route tests with the fixture simulator; combined `internal/app` tests with the real engine |
+
+Model probability and receive sampling stay separately tested in
+`reception_internal_test.go`. No generic scenario framework was added.
+
+### Performance
+
+Intel Core Ultra 7 265H, 16 logical CPUs, 63 GB RAM, Windows 11, Go 1.27.1,
+2026-09-14. One `Advance` operation is one virtual second at 100 vessels; 100x
+allows 10 ms.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| 1 station, no receptions | 261,245 | 132,115 | 1,004 |
+| 1 station, all received, full stores | 362,512 | 174,305 | 1,212 |
+| 1 station, 100 new MMSIs per second | 2,588,552 | 406,808 | 2,837 |
+| 3 stations, no receptions | 357,396 | 137,701 | 1,204 |
+| 3 stations, all received, full stores | 580,974 | 267,221 | 1,814 |
+| 3 stations, 100 new MMSIs per second | 3,017,767 | 601,221 | 4,241 |
+| 16 stations, no receptions | 696,116 | 171,857 | 2,504 |
+| 16 stations, all received, full stores | 2,091,327 | 860,104 | 5,717 |
+| 16 stations, 100 new MMSIs per second | 7,887,703 | 1,829,974 | 12,247 |
+| Engine `Observations`, 16 stations, 1,000 targets | 2,659,346 | 2,829,088 | 2,226 |
+| Display request end to end, same occupancy | 179,886,083 | 105,852,861 | 764,429 |
+
+- The real-time driver sustains 100x at every configuration; the churn case is a
+  synthetic worst case, since fleet replacement is a manual command.
+- Maximum encoded sizes: observations 5,453,334 bytes (8 MiB bound), 200 receptions
+  246,609 bytes (2 MiB bound), definition 1,225 bytes (4 KiB bound). The display
+  response at maximum occupancy is 5,477,976 bytes.
+- The display request profile is spread over JSON encoding in both hops (26%),
+  the decimal-string scan (21%), and decoding (18%). At 180 ms against a one-second
+  poll interval and five-second deadline, no algorithm change was made.
+- No engine opportunity is skipped; limits are unchanged.
+
+### Documentation
+
+`simulation/doc.go` now lists primary sources for the reference terms and states
+the model assumptions, so the plan's research file is not needed to understand
+the code. `.go-arch-lint.yml` responsibility comments include stations and station
+commands; dependencies are unchanged. The README records the measured limits.
+Other package documentation was already synchronized by steps 01-06.
+
+### Manual verification checklist
+
+1. `task run`, open the manager and display. Three stations appear with A/B
+   coverage; targets are drawn only where received.
+2. Set 100 vessels and speed 100 for at least 10 minutes. The display stays
+   responsive, the clock advances, no "stale" state appears, and the simulator log
+   has no backlog error.
+3. Apply "Disable B" to the harbour receiver: its B counters stop increasing while
+   A continues; other stations keep both channels.
+4. Disable a station: its targets age to stale and lost; re-enable it and new
+   receptions resume without retroactive data.
+5. Move a station far offshore: coverage and received targets change; old messages
+   in its history keep the original receiver snapshot.
+6. Select one station, then delete it in the manager: the display returns to all
+   stations with a removal notice.
+7. Pause: target ages freeze; resume continues.
+8. Stop the simulator while `task run:display` runs separately: the last view stays,
+   marked stale; restart the simulator and the display replaces all identities.
