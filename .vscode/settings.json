@@ -61,10 +61,12 @@
     ]
   },
   "cSpell.words": [
+    "gopls",
     "gotestsum",
     "LASTEXITCODE",
     "matejovsky",
     "miroslav",
+    "overcomplicate",
     "pkgname"
   ]
 }

@@ -18,8 +18,6 @@
 - `task all` must pass. Tests pass. Format pass. Lint pass.
 - Experimentation phase. Favor progress and clean code over backwards compatibility.
 
----
-
 ## Documentation
 
 - Use root `README.md` for project overview and architecture.
@@ -32,7 +30,7 @@
 ### Package / Namespace Documentation
 
 - Go package: use `doc.go`.
-- .NET namespace, project, or feature area: use `README.md` or architecture notes when no suitable documentation exists.
+- Other folders contains `README.md` when no suitable documentation exists.
 - If documentation missing, create it.
 - If design changes, update documentation in same change.
 
@@ -44,8 +42,6 @@
 - Document significant data structures and fields.
 - Documentation must be self-contained.
 - Do not require external documents to understand code.
-
----
 
 ## Architecture and Design
 
@@ -61,16 +57,12 @@
 - Validate inputs and configuration early.
 - Small changes preferred over large rewrites.
 
----
-
 ## Error Handling
 
 - Never swallow errors.
 - Return meaningful errors with context.
 - Log only when action can be taken or information is valuable.
 - Preserve original exception/error details whenever possible.
-
----
 
 ## Testing
 
@@ -113,8 +105,6 @@
 
 - Prefer table-driven tests when helpful.
 - Use `require` from `testify` for assertions.
-
----
 
 ## Output
 
