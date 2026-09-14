@@ -8,12 +8,12 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/display"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/httpserver"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulator"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ui"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // internalAddr is the private simulator API listener of combined mode. The OS
@@ -72,7 +72,7 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	// as soon as public serving starts.
 	internalServer := httpserver.Serve(logger, internalLn, internal)
 	publicServer := httpserver.Serve(logger, ln, public)
-	logger.Info("ais-test-bench started", "url", "http://"+ln.Addr().String(), "internalAPI", client.Origin())
+	logger.Info("ais-testbench started", "url", "http://"+ln.Addr().String(), "internalAPI", client.Origin())
 	simulationCtx, stopSimulation := context.WithCancel(ctx)
 	simulationDone := make(chan struct{})
 	var simulationErr error // Read only after simulationDone closes.
@@ -101,7 +101,7 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	if err != nil {
 		return err
 	}
-	logger.Info("ais-test-bench stopped")
+	logger.Info("ais-testbench stopped")
 	return nil
 }
 

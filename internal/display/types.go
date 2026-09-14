@@ -3,7 +3,7 @@ package display
 import (
 	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
 )
 
 // Observations is the GET /display/api/observations response: one validated

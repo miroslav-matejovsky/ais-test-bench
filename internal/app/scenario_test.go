@@ -14,11 +14,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/display"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/display"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulator"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // fixedClock is a real-time clock that never moves; tests step the engine.

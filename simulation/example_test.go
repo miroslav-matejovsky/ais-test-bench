@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // These examples use only the public package and the standard library. They

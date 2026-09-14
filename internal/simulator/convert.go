@@ -1,9 +1,9 @@
 package simulator
 
 import (
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 // The functions below map engine copies to wire types explicitly, so the public

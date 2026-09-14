@@ -249,8 +249,8 @@ func TestReceptionDraw(t *testing.T) {
 		sequence   uint64
 		want       float64
 	}{
-		{seed: 0, station: "station-1", rfRevision: 1, sequence: 1, want: 0.2032629584808201},
-		{seed: 42, station: "station-2", rfRevision: 3, sequence: 12345, want: 0.4353723029655384},
+		{seed: 0, station: "station-1", rfRevision: 1, sequence: 1, want: 0.8709159596269299},
+		{seed: 42, station: "station-2", rfRevision: 3, sequence: 12345, want: 0.10350254410121684},
 	} {
 		require.InDelta(t, tt.want, receptionDraw(tt.seed, tt.station, tt.rfRevision, tt.sequence), 0)
 	}

@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
 )
 
 // Contract checks for simulator metadata, station configuration, counters, and

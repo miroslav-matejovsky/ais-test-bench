@@ -8,8 +8,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ais"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
 )
 
 // defaultHistoryLimit is the simulator page size when a request has no limit.

@@ -12,8 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/cli"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/cli"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulator"
 )
 
 const defaultAddr = "localhost:8000"

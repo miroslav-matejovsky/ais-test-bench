@@ -3,7 +3,7 @@
 The `simulation` package is the traffic engine behind this test bench. It
 generates synthetic AIS position reports for a fleet of vessels, models which
 shore stations would actually receive each report, and exposes both as a
-deterministic, replayable engine. The applications (`cmd/ais-test-bench`,
+deterministic, replayable engine. The applications (`cmd/ais-testbench`,
 `cmd/simulator`, `cmd/display`) are one consumer of the engine; any Go program
 can import `simulation` directly.
 
@@ -60,7 +60,7 @@ specific real-world behaviors that make AIS software hard to get right:
   G1111-2's guidance that coverage depends on both antenna heights and
   installation losses - so that gaps, stale targets, and fading near the
   horizon behave like a real coastal AIS network, not a simple radius cutoff.
-  The model's specific parameters are test-bench choices, not calibrated
+  The model's specific parameters are testbench choices, not calibrated
   predictions; see `simulation.Metadata().Settings.Reception` and the
   package doc for exact sources and caveats.
 - **Multiple stations disagree, like a real base station network.** The

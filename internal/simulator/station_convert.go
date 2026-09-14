@@ -4,8 +4,8 @@ import (
 	"cmp"
 	"slices"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
-	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 )
 
 func stationSetResponse(set simulation.StationConfiguration) simulatorapi.StationSet {

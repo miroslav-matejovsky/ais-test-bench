@@ -6,7 +6,7 @@ import (
 	"time"
 
 	nmea "github.com/adrianmo/go-nmea"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ais"
 	"github.com/stretchr/testify/require"
 )
 

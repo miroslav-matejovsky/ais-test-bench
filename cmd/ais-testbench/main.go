@@ -12,8 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/app"
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/cli"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/app"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/cli"
 )
 
 const defaultAddr = "localhost:8000"
@@ -24,7 +24,7 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		logger.Error("ais-test-bench failed", "error", err)
+		logger.Error("ais-testbench failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -49,7 +49,7 @@ func run(args []string, logger *slog.Logger) error {
 // public HTTP listen address as host:port, validated by cli.ValidateListenAddr.
 // It defaults to defaultAddr. Usage and flag errors are printed to output.
 func parseAddr(args []string, output io.Writer) (string, error) {
-	fs := flag.NewFlagSet("ais-test-bench", flag.ContinueOnError)
+	fs := flag.NewFlagSet("ais-testbench", flag.ContinueOnError)
 	fs.SetOutput(output)
 	addr := fs.String("addr", defaultAddr, "HTTP listen address as host:port; host is required")
 	if err := fs.Parse(args); err != nil {

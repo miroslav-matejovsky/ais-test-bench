@@ -195,7 +195,7 @@ func decide(station StationDefinition, channel Channel, l link, draw float64) ou
 // and divides the first 53 bits by 2^53. It consumes no random source, so
 // outcomes do not depend on batching, station order, or other stations.
 func receptionDraw(seed uint64, stationID string, rfRevision, sequence uint64) float64 {
-	const tag = "ais-test-bench reception\x00"
+	const tag = "ais-testbench reception\x00"
 	buf := make([]byte, 0, len(tag)+32+len(stationID))
 	buf = append(buf, tag...)
 	buf = binary.BigEndian.AppendUint64(buf, seed)

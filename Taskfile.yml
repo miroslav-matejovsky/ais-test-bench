@@ -78,13 +78,13 @@ tasks:
       - task test
       - echo all done
 
-# ---- running stuff ----
+  # ---- running stuff ----
 
   run:
     desc: Start the server on http://localhost:8000 (host is explicit to avoid firewall prompts)
     silent: true
     cmds:
-      - go run ./cmd/ais-test-bench -addr localhost:8000
+      - go run ./cmd/ais-testbench -addr localhost:8000
 
   run:simulator:
     desc: Start the standalone simulator (API and manager) on http://localhost:8000
@@ -98,17 +98,17 @@ tasks:
     cmds:
       - go run ./cmd/display -addr localhost:8081 -simulator-url http://localhost:8000
 
-# ---- release ----
+  # ---- release ----
 
   release:
-    desc: 'Tag and push a release (task release -- 1.2.3, or VERSION=1.2.3). Go module release via git tag only, no artifacts.'
+    desc: "Tag and push a release (task release -- 1.2.3, or VERSION=1.2.3). Go module release via git tag only, no artifacts."
     silent: true
     vars:
-      RELEASE_VERSION: '{{.VERSION}}{{.CLI_ARGS}}'
+      RELEASE_VERSION: "{{.VERSION}}{{.CLI_ARGS}}"
     cmds:
       - pwsh -NoProfile -NonInteractive -File taskfile/release.ps1 -Version "{{.RELEASE_VERSION}}"
 
-# ---- maintenance tasks ----
+  # ---- maintenance tasks ----
 
   vendor:
     desc: Re-sync the committed vendor/ tree after changing dependencies (tidy + vendor)

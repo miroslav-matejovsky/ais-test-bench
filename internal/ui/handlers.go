@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui/assets"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/ui/assets"
 )
 
 // Link is one entry of the page header navigation.

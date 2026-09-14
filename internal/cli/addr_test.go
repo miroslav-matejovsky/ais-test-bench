@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/cli"
+	"github.com/miroslav-matejovsky/ais-testbench/internal/cli"
 )
 
 func TestValidateListenAddr(t *testing.T) {
