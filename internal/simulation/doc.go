@@ -16,10 +16,9 @@
 //
 // Mutations encode all reports before publishing, so a failed update leaves the
 // observable state unchanged. A single mutex protects all state; Fleet, History,
-// Metadata, and Snapshot return copies built under the lock. Fleet, History,
-// and Metadata use simulatorapi wire types, and metadata settings come from the
-// constants that drive generation. Snapshot is the decoded fleet view used by
-// the current display page. Restarting discards all state.
+// and Metadata return copies built under the lock, using simulatorapi wire
+// types. Metadata settings come from the constants that drive generation.
+// Restarting discards all state.
 //
 // The application, domain, and infrastructure subpackages hold earlier design
 // contracts for scenarios and playback.

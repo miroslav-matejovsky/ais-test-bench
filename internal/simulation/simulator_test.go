@@ -10,6 +10,7 @@ import (
 	nmea "github.com/adrianmo/go-nmea"
 	"github.com/stretchr/testify/require"
 
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 )
@@ -25,46 +26,57 @@ func newSimulator(t *testing.T, seed uint64) *simulation.Simulator {
 	return s
 }
 
+// decode returns the navigation data of a vessel's latest report.
+func decode(t *testing.T, vessel simulatorapi.Vessel) ais.Report {
+	t.Helper()
+	report, err := ais.DecodePosition(vessel.Report.Sentence)
+	require.NoError(t, err)
+	require.Equal(t, vessel.MMSI, report.MMSI)
+	return report
+}
+
 func TestFleetLifecycle(t *testing.T) {
 	now := start
 	s := newSimulator(t, 42)
-	initial := s.Snapshot()
+	initial := s.Fleet()
 	require.Len(t, initial.Vessels, 1)
 	require.Equal(t, 1, initial.MessageCount)
 	vessel := initial.Vessels[0]
+	origin := decode(t, vessel)
 	require.NoError(t, s.SetCount(3, now))
-	fleet := s.Snapshot().Vessels
+	fleet := s.Fleet().Vessels
 	require.Len(t, fleet, 3)
 	require.Equal(t, vessel, fleet[0])
 	require.NotEqual(t, fleet[0].MMSI, fleet[1].MMSI)
 	require.NotEqual(t, fleet[1].MMSI, fleet[2].MMSI)
 	require.NoError(t, s.Advance(now.Add(time.Minute)))
-	moved := s.Snapshot().Vessels[0]
-	require.NotEqual(t, vessel.Latitude, moved.Latitude)
-	// The great-circle distance must agree with one minute at reported speed.
+	movedVessel := s.Fleet().Vessels[0]
+	moved := decode(t, movedVessel)
+	require.NotEqual(t, *origin.Latitude, *moved.Latitude)
+	// The great-circle distance must agree with one minute at reported speed,
+	// within AIS coordinate precision.
 	rad := math.Pi / 180
-	dlat := (moved.Latitude - vessel.Latitude) * rad
-	dlon := (moved.Longitude - vessel.Longitude) * rad
-	a := math.Pow(math.Sin(dlat/2), 2) + math.Cos(vessel.Latitude*rad)*math.Cos(moved.Latitude*rad)*math.Pow(math.Sin(dlon/2), 2)
+	dlat := (*moved.Latitude - *origin.Latitude) * rad
+	dlon := (*moved.Longitude - *origin.Longitude) * rad
+	a := math.Pow(math.Sin(dlat/2), 2) + math.Cos(*origin.Latitude*rad)*math.Cos(*moved.Latitude*rad)*math.Pow(math.Sin(dlon/2), 2)
 	meters := 6371000 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-	require.InDelta(t, vessel.Speed*1852/60, meters, 0.001)
-	require.Equal(t, now.Add(time.Minute), moved.UpdatedAt)
-	require.Equal(t, 6, s.Snapshot().MessageCount)
+	require.InDelta(t, *origin.Speed*1852/60, meters, 0.5)
+	require.Equal(t, now.Add(time.Minute), movedVessel.Report.Timestamp)
+	require.Equal(t, 6, s.Fleet().MessageCount)
 	require.NoError(t, s.Advance(now))
-	require.Equal(t, 6, s.Snapshot().MessageCount)
+	require.Equal(t, 6, s.Fleet().MessageCount)
 	require.NoError(t, s.SetCount(0, now.Add(time.Minute)))
-	require.Empty(t, s.Snapshot().Vessels)
 	require.Empty(t, s.Fleet().Vessels)
 	require.NotNil(t, s.Fleet().Vessels)
 	require.NoError(t, s.Advance(now.Add(2*time.Minute)))
 	require.Equal(t, now.Add(2*time.Minute), s.Fleet().UpdatedAt, "ticks advance time for an empty fleet")
 	require.Len(t, s.History().Messages, 6)
 	require.NoError(t, s.SetCount(1, now.Add(2*time.Minute)))
-	require.NotEqual(t, vessel.MMSI, s.Snapshot().Vessels[0].MMSI)
-	before := s.Snapshot()
+	require.NotEqual(t, vessel.MMSI, s.Fleet().Vessels[0].MMSI)
+	before := s.Fleet()
 	for _, count := range []int{-1, simulation.MaxVessels + 1} {
 		require.Error(t, s.SetCount(count, now))
-		require.Equal(t, before, s.Snapshot())
+		require.Equal(t, before, s.Fleet())
 	}
 }
 
@@ -96,7 +108,7 @@ func TestReportsDescribeActiveFleet(t *testing.T) {
 	// Reads never consume sequences.
 	s.Fleet()
 	s.History()
-	s.Snapshot()
+	s.Metadata()
 
 	// Movement publishes one sentence to both latest report and history.
 	moved := start.Add(2 * time.Second)
@@ -154,7 +166,7 @@ func TestHistoryRetention(t *testing.T) {
 	require.Equal(t, simulation.MessageLimit, s.Fleet().MessageCount)
 }
 
-func TestSnapshotIsolation(t *testing.T) {
+func TestReadsReturnCopies(t *testing.T) {
 	s := newSimulator(t, 1)
 	fleet := s.Fleet()
 	fleet.Vessels[0].Name = "changed"
@@ -165,13 +177,10 @@ func TestSnapshotIsolation(t *testing.T) {
 	metadata := s.Metadata()
 	metadata.VesselTypes[0].Name = "changed"
 	metadata.SupportedMessageTypes[0] = 99
-	snapshot := s.Snapshot()
-	snapshot.Vessels[0].Name = "changed"
 
 	require.NotEqual(t, fleet, s.Fleet())
 	require.NotEqual(t, history, s.History())
 	require.NotEqual(t, metadata, s.Metadata())
-	require.NotEqual(t, snapshot, s.Snapshot())
 	requireBounds(t, s.History(), 1, 1)
 }
 
@@ -195,16 +204,16 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 	require.NoError(t, s.SetCount(metadata.Settings.MaxVessels, start))
 	require.Error(t, s.SetCount(metadata.Settings.MaxVessels+1, start))
 	speed, bounds := metadata.Settings.SpeedKnots, metadata.Settings.SpawnBounds
-	for _, vessel := range s.Snapshot().Vessels {
-		require.GreaterOrEqual(t, vessel.Latitude, bounds.South)
-		require.Less(t, vessel.Latitude, bounds.North)
-		require.GreaterOrEqual(t, vessel.Longitude, bounds.West)
-		require.Less(t, vessel.Longitude, bounds.East)
-		require.GreaterOrEqual(t, vessel.Speed, speed.Min)
-		require.LessOrEqual(t, vessel.Speed, speed.Max)
-		require.InDelta(t, math.Round(vessel.Speed*10), vessel.Speed*10, 1e-9)
-	}
+	// Decoded coordinates are rounded to AIS precision, so the exclusive north
+	// and east limits are checked inclusively.
 	for _, vessel := range s.Fleet().Vessels {
+		report := decode(t, vessel)
+		require.GreaterOrEqual(t, *report.Latitude, bounds.South)
+		require.LessOrEqual(t, *report.Latitude, bounds.North)
+		require.GreaterOrEqual(t, *report.Longitude, bounds.West)
+		require.LessOrEqual(t, *report.Longitude, bounds.East)
+		require.GreaterOrEqual(t, *report.Speed, speed.Min)
+		require.LessOrEqual(t, *report.Speed, speed.Max)
 		require.Contains(t, metadata.VesselTypes, simulatorapi.VesselType{ID: vessel.TypeID, Name: "Cargo vessel"})
 	}
 }
@@ -212,7 +221,6 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 func TestSeedReproducesFleet(t *testing.T) {
 	a := newSimulator(t, 42)
 	b := newSimulator(t, 42)
-	require.Equal(t, a.Snapshot(), b.Snapshot())
 	require.Equal(t, a.Fleet(), b.Fleet())
 	require.Equal(t, a.History(), b.History())
 }
@@ -245,7 +253,6 @@ func TestConcurrentAccessAndCancellation(t *testing.T) {
 				if err := s.Advance(now.Add(time.Duration(i) * time.Second)); err != nil {
 					t.Error(err)
 				}
-				s.Snapshot()
 				s.Fleet()
 				s.History()
 				s.Metadata()

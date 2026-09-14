@@ -41,26 +41,12 @@ const (
 // vesselTypes is the application vessel category catalog.
 var vesselTypes = []simulatorapi.VesselType{{ID: cargoTypeID, Name: "Cargo vessel"}}
 
-// Vessel combines a stable synthetic identity with its latest navigation data.
-// It is the decoded view used by the current display page.
-type Vessel struct {
-	ais.Position
-	Name string `json:"name"`
-}
-
-// Snapshot is a consistent view of active vessels with decoded navigation data
-// and retained message count. It is used by the current display page.
-type Snapshot struct {
-	Vessels      []Vessel  `json:"vessels"`
-	MessageCount int       `json:"messageCount"`
-	MessageLimit int       `json:"messageLimit"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-}
-
-// vesselState is one active vessel. Invariant: report is the encoding of the
-// current Position, and the same message is in history until evicted.
+// vesselState is one active vessel: navigation state, stable synthetic identity,
+// and latest report. Invariant: report is the encoding of the current Position,
+// and the same message is in history until evicted.
 type vesselState struct {
-	Vessel
+	ais.Position
+	name   string
 	typeID string
 	report simulatorapi.Message
 }
@@ -133,13 +119,13 @@ func (s *Simulator) SetCount(count int, now time.Time) error {
 	mmsi := s.nextMMSI
 	for range cap(added) {
 		course := float64(s.random.IntN(360))
-		vessel := vesselState{Vessel: Vessel{Position: ais.Position{
+		vessel := vesselState{Position: ais.Position{
 			MMSI:      mmsi,
 			Latitude:  spawnSouth + s.random.Float64()*spawnLatSpan,
 			Longitude: spawnWest + s.random.Float64()*spawnLonSpan,
 			Speed:     minSpeedKnots + float64(s.random.IntN(speedSteps))/10,
 			Course:    course, Heading: int(course), UpdatedAt: now.UTC(),
-		}, Name: fmt.Sprintf("Vessel %d", mmsi-firstMMSI+1)}, typeID: cargoTypeID}
+		}, name: fmt.Sprintf("Vessel %d", mmsi-firstMMSI+1), typeID: cargoTypeID}
 		report, err := encode(vessel.Position, s.sequence+uint64(len(reports))+1)
 		if err != nil {
 			return err
@@ -242,7 +228,7 @@ func (s *Simulator) Fleet() simulatorapi.Fleet {
 	vessels := make([]simulatorapi.Vessel, 0, len(s.vessels))
 	for _, vessel := range s.vessels {
 		vessels = append(vessels, simulatorapi.Vessel{
-			MMSI: vessel.MMSI, Name: vessel.Name, TypeID: vessel.typeID,
+			MMSI: vessel.MMSI, Name: vessel.name, TypeID: vessel.typeID,
 			Report: simulatorapi.Report{Sequence: vessel.report.Sequence, Timestamp: vessel.report.Timestamp, Sentence: vessel.report.Sentence},
 		})
 	}
@@ -288,16 +274,4 @@ func (s *Simulator) Metadata() simulatorapi.Metadata {
 			},
 		},
 	}
-}
-
-// Snapshot returns a copy of the active fleet with decoded navigation data and
-// the current history size.
-func (s *Simulator) Snapshot() Snapshot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vessels := make([]Vessel, 0, len(s.vessels))
-	for _, vessel := range s.vessels {
-		vessels = append(vessels, vessel.Vessel)
-	}
-	return Snapshot{Vessels: vessels, MessageCount: len(s.messages), MessageLimit: MessageLimit, UpdatedAt: s.updatedAt}
 }

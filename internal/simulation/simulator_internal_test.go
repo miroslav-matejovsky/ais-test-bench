@@ -17,12 +17,12 @@ func TestFailedMutationKeepsState(t *testing.T) {
 	require.NoError(t, s.SetCount(2, start))
 
 	// The first added vessel encodes; the second MMSI exceeds nine digits.
-	fleet, history, snapshot := s.Fleet(), s.History(), s.Snapshot()
+	// Fleet reports encode positions, so fleet equality covers navigation state.
+	fleet, history := s.Fleet(), s.History()
 	s.nextMMSI = 999999999
 	require.Error(t, s.SetCount(4, start.Add(time.Second)))
 	require.Equal(t, fleet, s.Fleet())
 	require.Equal(t, history, s.History())
-	require.Equal(t, snapshot, s.Snapshot())
 	require.Equal(t, uint32(999999999), s.nextMMSI)
 
 	// The first vessel moves and encodes; the second cannot encode.
