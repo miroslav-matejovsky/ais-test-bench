@@ -60,13 +60,6 @@ Both UIs are server-rendered with `html/template` and htmx 4, in `internal/ui`.
 Templates, CSS, and a vendored htmx build are embedded in the binary, so no Node
 toolchain is needed. See [startup](docs/startup.md) for routes and rendering rules.
 
-## Project guide
-
-- [Complete directory tree](docs/tree.md)
-- [Every package, interface, responsibility, and dependency](docs/packages.md)
-- [Startup, routes, rendering, shutdown](docs/startup.md)
-- [Dependencies and sources](docs/dependencies.md)
-
 ## Development
 
 Use the Go version declared in `go.mod`. Checks use Task, PowerShell,
