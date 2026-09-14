@@ -16,6 +16,106 @@ type Config struct {
 	InitialVesselCount int
 	// Speed is the initial Elapse multiplier. See Simulator.SetSpeed.
 	Speed float64
+	// Transmitter is the run-level reference transmitter every vessel uses. It
+	// has no zero-value default; every field must be in its documented range.
+	Transmitter TransmitterProfile
+	// Stations are the initial receiving stations, 0 through MaxStations. Nil
+	// and empty mean zero receivers. New assigns IDs in slice order.
+	Stations []StationDefinition
+}
+
+// TransmitterProfile is the reference AIS transmitter assumed for all vessels.
+// Ranges are simulator limits, not regulatory values.
+type TransmitterProfile struct {
+	// PowerWatts is the output power, in (0, 25] W.
+	PowerWatts float64
+	// HeightMeters is the antenna height above mean sea level, in (0, 100] m.
+	HeightMeters float64
+	// GainDBi is the antenna gain, in [-10, 20] dBi.
+	GainDBi float64
+	// FeederLossDB is the cable and connector loss, in [0, 30] dB.
+	FeederLossDB float64
+}
+
+// StationDefinition is the editable configuration of one receiving station.
+// All numbers must be finite. A zero value is invalid: both channels need a
+// sensitivity and the antenna needs a height.
+type StationDefinition struct {
+	// Name is a required display label of at most MaxStationNameRunes runes of
+	// valid UTF-8, so at most 320 bytes. It is not blank. Duplicates are allowed.
+	Name string
+	// Latitude is WGS84 decimal degrees in [-90, 90].
+	Latitude float64
+	// Longitude is WGS84 decimal degrees in [-180, 180]; 180 is stored as -180.
+	Longitude float64
+	// Enabled is the administrative receiving state.
+	Enabled bool
+	// AntennaHeightMeters is the height above mean sea level, site elevation
+	// plus mast, in (0, 500] m.
+	AntennaHeightMeters float64
+	// ReceiveGainDBi is the single effective antenna gain, in [-10, 20] dBi.
+	ReceiveGainDBi float64
+	// FeederLossDB is cable, connector, and splitter loss, in [0, 30] dB.
+	FeederLossDB float64
+	// ChannelA and ChannelB are both required, even when disabled.
+	ChannelA ReceiverChannel
+	ChannelB ReceiverChannel
+	// ShadowSectors are at most MaxShadowSectors non-overlapping bearing
+	// intervals with extra loss. Empty means omnidirectional coverage. Stored
+	// definitions hold them sorted by StartDegrees.
+	ShadowSectors []ShadowSector
+}
+
+// ReceiverChannel is the receiving capability of one AIS channel.
+type ReceiverChannel struct {
+	// Enabled reports whether the station receives this channel. All channels
+	// disabled is a valid degraded configuration.
+	Enabled bool
+	// SensitivityDBm is the reference sensitivity, in [-125, -80] dBm.
+	SensitivityDBm float64
+	// NoisePenaltyDB degrades the sensitivity, in [0, 40] dB.
+	NoisePenaltyDB float64
+	// DropProbability is an extra packet-drop probability in [0, 1].
+	DropProbability float64
+}
+
+// ShadowSector is a bearing interval, clockwise from true north, with extra
+// loss. StartDegrees is inclusive and EndDegrees exclusive, both in [0, 360).
+// StartDegrees greater than EndDegrees wraps across north. Equal values are
+// rejected; a full-circle loss belongs to the common link settings.
+type ShadowSector struct {
+	StartDegrees float64
+	EndDegrees   float64
+	// LossDB is the extra loss inside the sector, in [0, 60] dB.
+	LossDB float64
+}
+
+// Station is one configured receiving station.
+type Station struct {
+	// ID is the immutable run-local identity, never reused within a run. It is
+	// independent of names and positions in the station list.
+	ID string
+	// Definition is the canonical stored configuration.
+	Definition StationDefinition
+	// ConfigRevision starts at 1 and increases on every effective edit.
+	ConfigRevision uint64
+	// RFRevision starts at 1 and increases on every edit that affects reception
+	// or coverage, which is every field except Name.
+	RFRevision uint64
+	// CreatedAt is the virtual UTC instant the station was added.
+	CreatedAt time.Time
+}
+
+// StationSet is the complete station configuration copied from one consistent
+// engine state.
+type StationSet struct {
+	// SimulationID is the identity of the engine run.
+	SimulationID string
+	// Revision starts at 1 and increases on every effective add, edit, or
+	// removal. Station edits take it as their expected revision.
+	Revision uint64
+	// Stations are ordered by creation. An empty set is a non-nil empty slice.
+	Stations []Station
 }
 
 // Fleet is the complete active fleet copied from one consistent engine state.
@@ -127,6 +227,10 @@ type Settings struct {
 	SpeedKnots          SpeedRange
 	Speed               SpeedLimits
 	SpawnBounds         SpawnBounds
+	MaxStations         int
+	// Transmitter is Config.Transmitter, the profile every coverage estimate
+	// and reception assumes.
+	Transmitter TransmitterProfile
 }
 
 // SpeedLimits is the accepted running speed range and precision. Speed 0 is the

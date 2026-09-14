@@ -14,6 +14,22 @@
 #    and the alternative (dropping it) means dropping the assertion it enables.
 $allow = @(
     'Simulator.Advance'
+    # Staged station configuration API, reachable once the simulator HTTP API
+    # adds station routes (docs/plans/multiple-base-stations step 04). Temporary.
+    'Simulator.AddStation'
+    'Simulator.UpdateStation'
+    'Simulator.RemoveStation'
+    'Simulator.Stations'
+    'Simulator.stationSet'
+    'Simulator.checkStationRevision'
+    'Simulator.findStation'
+    'ValidateStation'
+    'equalStation'
+    'Driver.AddStation'
+    'Driver.UpdateStation'
+    'Driver.RemoveStation'
+    'Driver.Stations'
+    'Driver.prepareStationEdit'
 )
 
 $out = deadcode ./cmd/... 2>&1

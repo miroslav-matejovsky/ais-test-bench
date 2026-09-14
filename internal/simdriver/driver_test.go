@@ -51,9 +51,20 @@ func (c *fakeClock) NewTicker(time.Duration) (<-chan time.Time, func()) {
 
 func newEngine(t *testing.T) *simulation.Simulator {
 	t.Helper()
-	sim, err := simulation.New(simulation.Config{ID: "run-1", StartTime: virtualStart, Seed: 1, InitialVesselCount: 1, Speed: 1})
+	sim, err := simulation.New(simulation.Config{
+		ID: "run-1", StartTime: virtualStart, Seed: 1, InitialVesselCount: 1, Speed: 1,
+		Transmitter: simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
+		Stations:    []simulation.StationDefinition{site("Site")},
+	})
 	require.NoError(t, err)
 	return sim
+}
+
+func site(name string) simulation.StationDefinition {
+	channel := simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -110}
+	return simulation.StationDefinition{
+		Name: name, Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: channel,
+	}
 }
 
 func newDriver(t *testing.T) (*simulation.Simulator, *fakeClock, *simdriver.Driver) {
@@ -82,8 +93,8 @@ func run(t *testing.T, clock *fakeClock, driver *simdriver.Driver) (wake func(),
 }
 
 // observe returns every observable read of an engine.
-func observe(sim *simulation.Simulator) [3]any {
-	return [3]any{sim.Fleet(), sim.History(), sim.Metadata()}
+func observe(sim *simulation.Simulator) [4]any {
+	return [4]any{sim.Fleet(), sim.History(), sim.Metadata(), sim.Stations()}
 }
 
 // cancelAfter reports cancellation after Err returned nil checks times.
@@ -273,6 +284,53 @@ func TestDriverDelegatesToEngine(t *testing.T) {
 	require.Equal(t, sim.Fleet(), driver.Fleet())
 	require.Equal(t, sim.History(), driver.History())
 	require.Equal(t, sim.Metadata(), driver.Metadata())
+	require.Equal(t, sim.Stations(), driver.Stations())
+}
+
+func TestStationCommandsSettleAtCurrentInstant(t *testing.T) {
+	sim, clock, driver := newDriver(t)
+
+	clock.Add(1500 * time.Millisecond)
+	id, stations, err := driver.AddStation(t.Context(), 1, site("Added"))
+	require.NoError(t, err)
+	require.Equal(t, "station-2", id)
+	require.Equal(t, sim.Stations(), stations)
+	require.Equal(t, virtualStart.Add(1500*time.Millisecond), stations.Stations[1].CreatedAt)
+	require.Len(t, sim.History().Messages, 2, "the tick before the edit is delivered")
+
+	clock.Add(time.Second)
+	stations, err = driver.UpdateStation(t.Context(), 2, id, site("Renamed"))
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), stations.Revision)
+	require.Equal(t, virtualStart.Add(2500*time.Millisecond), sim.Metadata().Time.Now)
+
+	clock.Add(time.Second)
+	stations, err = driver.RemoveStation(t.Context(), 3, id)
+	require.NoError(t, err)
+	require.Equal(t, []simulation.Station{sim.Stations().Stations[0]}, stations.Stations)
+	require.Equal(t, virtualStart.Add(3500*time.Millisecond), sim.Metadata().Time.Now)
+}
+
+func TestRejectedStationCommandsDoNotSettle(t *testing.T) {
+	sim, clock, driver := newDriver(t)
+	clock.Add(5 * time.Second)
+	before := observe(sim)
+
+	_, _, err := driver.AddStation(t.Context(), 1, site(""))
+	require.ErrorIs(t, err, simulation.ErrInvalid)
+	_, _, err = driver.AddStation(t.Context(), 2, site("Stale"))
+	require.ErrorIs(t, err, simulation.ErrConflict)
+	_, err = driver.UpdateStation(t.Context(), 1, "station-1", site(""))
+	require.ErrorIs(t, err, simulation.ErrInvalid)
+	_, err = driver.UpdateStation(t.Context(), 0, "station-1", site("Stale"))
+	require.ErrorIs(t, err, simulation.ErrConflict)
+	_, err = driver.UpdateStation(t.Context(), 1, "station-9", site("Missing"))
+	require.ErrorIs(t, err, simulation.ErrNotFound)
+	_, err = driver.RemoveStation(t.Context(), 2, "station-1")
+	require.ErrorIs(t, err, simulation.ErrConflict)
+	_, err = driver.RemoveStation(t.Context(), 1, "station-9")
+	require.ErrorIs(t, err, simulation.ErrNotFound)
+	require.Equal(t, before, observe(sim))
 }
 
 func TestNewConfigStartsFreshRealTimeRun(t *testing.T) {
@@ -284,6 +342,33 @@ func TestNewConfigStartsFreshRealTimeRun(t *testing.T) {
 	require.False(t, a.StartTime.Before(before))
 	require.Equal(t, 1, a.InitialVesselCount)
 	require.InDelta(t, 1.0, a.Speed, 0)
-	_, err := simulation.New(a)
+	require.Equal(t, simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1}, a.Transmitter)
+	sim, err := simulation.New(a)
 	require.NoError(t, err)
+
+	stations := sim.Stations().Stations
+	require.Len(t, stations, 3)
+	for i, want := range []struct {
+		name        string
+		lat, lon    float64
+		height      float64
+		sensitivity float64
+		sectors     int
+	}{
+		{name: "Rotterdam coast", lat: 51.98, lon: 4.05, height: 25, sensitivity: -110},
+		{name: "Northern coast", lat: 52.12, lon: 4.24, height: 40, sensitivity: -112},
+		{name: "Harbour receiver", lat: 51.95, lon: 4.14, height: 15, sensitivity: -108, sectors: 1},
+	} {
+		got := stations[i].Definition
+		require.Equal(t, want.name, got.Name)
+		require.InDelta(t, want.lat, got.Latitude, 0)
+		require.InDelta(t, want.lon, got.Longitude, 0)
+		require.InDelta(t, want.height, got.AntennaHeightMeters, 0)
+		require.True(t, got.Enabled)
+		for _, channel := range []simulation.ReceiverChannel{got.ChannelA, got.ChannelB} {
+			require.Equal(t, simulation.ReceiverChannel{Enabled: true, SensitivityDBm: want.sensitivity}, channel)
+		}
+		require.Len(t, got.ShadowSectors, want.sectors)
+	}
+	require.Equal(t, []simulation.ShadowSector{{StartDegrees: 270, EndDegrees: 330, LossDB: 15}}, stations[2].Definition.ShadowSectors)
 }

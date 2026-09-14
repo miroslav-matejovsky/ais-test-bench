@@ -33,12 +33,17 @@ const (
 )
 
 var (
-	// ErrInvalid marks rejected input: configuration, count, speed, or a
-	// negative duration.
+	// ErrInvalid marks rejected input: configuration, count, speed, station
+	// definition, or a negative duration.
 	ErrInvalid = errors.New("invalid simulation input")
 	// ErrLimit marks a request beyond engine limits: an advance over MaxAdvance,
-	// a virtual time after year 9999, or exhausted duration or sequence range.
+	// a virtual time after year 9999, more than MaxStations, or an exhausted
+	// duration, sequence, station ID, or revision range.
 	ErrLimit = errors.New("simulation limit exceeded")
+	// ErrNotFound marks a station ID that is not configured.
+	ErrNotFound = errors.New("simulation station not found")
+	// ErrConflict marks a station edit based on a stale station set revision.
+	ErrConflict = errors.New("simulation station configuration conflict")
 )
 
 // Generation settings. Metadata derives its values from these constants.
@@ -88,16 +93,22 @@ type state struct {
 	remainder int64         // Scaled real time below 1ns, in hundredths of a nanosecond (0-99).
 	speed     int64         // Elapse multiplier in hundredths; 0 pauses.
 	updatedAt time.Time     // Latest report tick or effective count change.
+
+	stations        []stationState // Creation order.
+	lastStationID   uint64         // Last allocated station number; IDs are never reused.
+	stationRevision uint64         // Station set revision, starting at 1.
 }
 
 // Simulator owns vessels, its random source, its virtual clock, and recent
 // messages under one lock. Construct it with New. It starts no goroutine and
 // reads no clock.
 type Simulator struct {
-	// id, start, and initialCount are immutable after New and read without the lock.
+	// id, start, initialCount, and transmitter are immutable after New and read
+	// without the lock.
 	id           string
 	start        time.Time
 	initialCount int
+	transmitter  TransmitterProfile
 
 	mu       sync.Mutex
 	state    state
@@ -125,12 +136,21 @@ func New(config Config) (*Simulator, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := validateTransmitter(config.Transmitter); err != nil {
+		return nil, err
+	}
+	stations, err := newStations(config.Stations, start)
+	if err != nil {
+		return nil, err
+	}
 	s := &Simulator{
 		id: config.ID, start: start, initialCount: config.InitialVesselCount,
+		transmitter: config.Transmitter,
 		state: state{
 			source:  *mathrand.NewPCG(config.Seed, config.Seed^0xa15),
 			vessels: make([]vesselState, 0), nextMMSI: firstMMSI,
 			speed: speed, updatedAt: start,
+			stations: stations, lastStationID: uint64(len(stations)), stationRevision: firstRevision,
 		},
 		messages: make([]Message, 0),
 	}
@@ -323,6 +343,7 @@ func move(p *ais.Position, at time.Time) {
 func (s *Simulator) stage() state {
 	next := s.state
 	next.vessels = slices.Clone(s.state.vessels)
+	next.stations = slices.Clone(s.state.stations)
 	return next
 }
 
@@ -433,6 +454,8 @@ func (s *Simulator) Metadata() Metadata {
 				South: spawnSouth, North: spawnSouth + spawnLatSpan,
 				West: spawnWest, East: spawnWest + spawnLonSpan,
 			},
+			MaxStations: MaxStations,
+			Transmitter: s.transmitter,
 		},
 	}
 }

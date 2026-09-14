@@ -10,9 +10,36 @@
 // # Configuration
 //
 // New takes an explicit Config: run identity, start instant, seed, initial
-// vessel count, and speed. The engine never reads a clock, sleeps, starts
-// goroutines, or uses global randomness. The same implementation, Config, and
-// ordered calls produce the same sentences, timestamps, MMSIs, and sequences.
+// vessel count, speed, reference transmitter, and receiving stations. The engine
+// never reads a clock, sleeps, starts goroutines, or uses global randomness, and
+// never fills in defaults: a zero TransmitterProfile or StationDefinition is
+// invalid. The same implementation, Config, and ordered calls produce the same
+// sentences, timestamps, MMSIs, and sequences.
+//
+// # Receiving stations
+//
+// A station is a synthetic shore receiving site: position, antenna height,
+// receive gain, feeder loss, channel A and B capability, and up to
+// MaxShadowSectors bearing sectors with extra loss. Config.Stations holds 0
+// through MaxStations definitions; zero stations is valid. TransmitterProfile is
+// the one run-level transmitter every vessel uses and is published in
+// Metadata.Settings. Field docs state every range. Validation rejects non-finite
+// numbers before range checks. Stored definitions are canonical: longitude 180
+// becomes -180 and shadow sectors are sorted by start. Sectors must not overlap.
+//
+// New assigns IDs station-1, station-2, and so on in definition order.
+// AddStation allocates the next number, never reusing one, and never consumes
+// vessel randomness, so stations never change vessel reports. Every station has
+// a config revision, increased by every effective edit, and an RF revision,
+// increased by every edit except a name-only one. A no-op edit keeps both. The
+// StationSet revision starts at 1, increases with every effective add, edit, or
+// removal, and is the expected revision of the next edit. Stations holds the
+// configuration only; reception is future work.
+//
+// Station errors separate their causes: ErrInvalid for a rejected definition,
+// ErrConflict for a stale expected revision, ErrNotFound for an unknown ID, and
+// ErrLimit for MaxStations or an exhausted ID or revision range. Validation and
+// all checks complete before any change.
 //
 // # Virtual time
 //
@@ -48,5 +75,5 @@
 // changes no future result. Errors wrap ErrInvalid for rejected input and
 // ErrLimit for exceeded limits. One mutex makes all methods safe for concurrent
 // use, but reproducible output requires callers to order their mutations.
-// Fleet, History, Metadata, and returned reports are detached copies.
+// Fleet, History, Metadata, Stations, and returned values are detached copies.
 package simulation

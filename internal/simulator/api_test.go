@@ -57,7 +57,10 @@ type fixture struct {
 
 func newFixture(t *testing.T) fixture {
 	t.Helper()
-	sim, err := simulation.New(simulation.Config{ID: "run-1", StartTime: start, Seed: 1, InitialVesselCount: 1, Speed: 1})
+	sim, err := simulation.New(simulation.Config{
+		ID: "run-1", StartTime: start, Seed: 1, InitialVesselCount: 1, Speed: 1,
+		Transmitter: simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
+	})
 	require.NoError(t, err)
 	clock := &testClock{now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)}
 	driver := simdriver.NewDriver(sim, clock)

@@ -3,5 +3,10 @@
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
 
-- support to simulate multiple AIS base stations
+- support to simulate multiple AIS base stations (docs/plans/multiple-base-stations, steps 02-07)
+  - step 01 leftovers: manager preset disabling channel B on the harbour receiver (step 04);
+    fixed test scenarios near/beyond the coverage contour and a documented long run (needs step 02 model);
+    model version and model parameters in metadata settings (step 02);
+    4 KiB encoded limit enforced on the wire station type (step 04);
+    remove staged station symbols from taskfile/deadcode.ps1 allowlist once routes call them (step 04)
 - support to simulate failures of AIS base stations

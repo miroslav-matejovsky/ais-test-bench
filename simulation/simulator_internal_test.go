@@ -10,6 +10,47 @@ import (
 
 var internalConfig = Config{
 	ID: "run-1", StartTime: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC), Seed: 1, InitialVesselCount: 2, Speed: 0.33,
+	Transmitter: TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
+}
+
+// TestStationRangesExhaustBeforeMutation drives allocator and revision counters
+// to their maximum, which public calls cannot reach in a test.
+func TestStationRangesExhaustBeforeMutation(t *testing.T) {
+	config := internalConfig
+	channel := ReceiverChannel{Enabled: true, SensitivityDBm: -110}
+	config.Stations = []StationDefinition{{
+		Name: "Site", Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: channel,
+	}}
+	s, err := New(config)
+	require.NoError(t, err)
+	site := config.Stations[0]
+	moved, renamed := site, site
+	moved.Latitude = 51
+	renamed.Name = "Renamed"
+
+	s.state.lastStationID = math.MaxUint64
+	before := s.Stations()
+	_, _, err = s.AddStation(1, site)
+	require.ErrorIs(t, err, ErrLimit)
+	require.Equal(t, before, s.Stations())
+
+	s.state.stations[0].rfRevision = math.MaxUint64
+	_, err = s.UpdateStation(1, "station-1", moved)
+	require.ErrorIs(t, err, ErrLimit)
+	require.Equal(t, site, s.Stations().Stations[0].Definition)
+	stations, err := s.UpdateStation(1, "station-1", renamed)
+	require.NoError(t, err, "a name-only edit keeps the RF revision")
+	require.Equal(t, uint64(2), stations.Stations[0].ConfigRevision)
+
+	s.state.stations[0].configRevision = math.MaxUint64
+	_, err = s.UpdateStation(2, "station-1", site)
+	require.ErrorIs(t, err, ErrLimit)
+
+	s.state.stationRevision = math.MaxUint64
+	before = s.Stations()
+	_, err = s.RemoveStation(math.MaxUint64, "station-1")
+	require.ErrorIs(t, err, ErrLimit)
+	require.Equal(t, before, s.Stations())
 }
 
 // TestFailedMutationKeepsState forces encoding failures through internal state,

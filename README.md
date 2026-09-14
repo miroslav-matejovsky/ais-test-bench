@@ -122,6 +122,8 @@ sim, err := simulation.New(simulation.Config{
     Seed:               42,
     InitialVesselCount: 2,
     Speed:              1,
+    Transmitter:        simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
+    Stations:           nil, // 0-16 receiving stations
 })
 if err != nil {
     return err
@@ -138,7 +140,16 @@ for _, report := range reports {
 
 - **Config:** every field is explicit; seed, count, and speed 0 are valid values,
   not defaults. The ID must be nonempty. `StartTime` must be nonzero and within
-  years 1-9999 and is normalized to UTC. Count is 0-100.
+  years 1-9999 and is normalized to UTC. Count is 0-100. `Transmitter` is the
+  reference transmitter all vessels use and has no default.
+- **Stations:** `Config.Stations` holds 0-16 synthetic receiving sites: position,
+  antenna height, gain, feeder loss, channel A/B sensitivity and impairment, and
+  up to 8 shadow sectors. `AddStation`, `UpdateStation`, and `RemoveStation` take
+  the expected `Stations().Revision`; errors wrap `ErrInvalid`, `ErrConflict`,
+  `ErrNotFound`, or `ErrLimit`. IDs are never reused. Name-only edits keep the
+  RF revision. Stations do not change vessel reports. Reception is future work.
+  The application starts with three demonstration sites, documented in
+  `internal/simdriver`.
 - **Messages:** `SetCount` returns the creation reports; `Advance` and `Elapse`
   return every report they emit, in sequence order, as `Message{Sequence, MMSI,
   Timestamp, Sentence}`. Sentences are checksummed type 1 `!AIVDM` lines with

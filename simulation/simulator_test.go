@@ -21,7 +21,7 @@ const runID = "run-1"
 var start = time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
 
 func testConfig(seed uint64, count int) simulation.Config {
-	return simulation.Config{ID: runID, StartTime: start, Seed: seed, InitialVesselCount: count, Speed: 1}
+	return simulation.Config{ID: runID, StartTime: start, Seed: seed, InitialVesselCount: count, Speed: 1, Transmitter: transmitter}
 }
 
 func newSimulator(t *testing.T, config simulation.Config) *simulation.Simulator {
@@ -76,10 +76,11 @@ type snapshot struct {
 	Fleet    simulation.Fleet
 	History  simulation.History
 	Metadata simulation.Metadata
+	Stations simulation.StationSet
 }
 
 func observe(s *simulation.Simulator) snapshot {
-	return snapshot{Fleet: s.Fleet(), History: s.History(), Metadata: s.Metadata()}
+	return snapshot{Fleet: s.Fleet(), History: s.History(), Metadata: s.Metadata(), Stations: s.Stations()}
 }
 
 // decode returns the navigation data of an AIS sentence.
@@ -296,6 +297,7 @@ func TestReportsDescribeActiveFleet(t *testing.T) {
 func TestTicksKeepExistingMovement(t *testing.T) {
 	s := newSimulator(t, simulation.Config{
 		ID: "test-run", StartTime: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC), Seed: 42, InitialVesselCount: 2, Speed: 1,
+		Transmitter: transmitter,
 	})
 	runSteps(t, s, advance(time.Second))
 
@@ -687,6 +689,8 @@ func TestMetadataDescribesGeneration(t *testing.T) {
 			SpeedKnots:  simulation.SpeedRange{Min: 6, Max: 15.9},
 			SpawnBounds: simulation.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
 			Speed:       simulation.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
+			MaxStations: 16,
+			Transmitter: simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
 		},
 	}, metadata)
 	require.Len(t, s.Fleet().Vessels, metadata.Settings.InitialVesselCount)

@@ -13,6 +13,9 @@ import (
 // These examples use only the public package and the standard library. They
 // need no server, network, or sleep.
 
+// transmitter is the reference transmitter of every example run.
+var transmitter = simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1}
+
 // New creates the initial fleet deterministically: the same Config always
 // yields the same vessels and sentences.
 func ExampleNew() {
@@ -22,6 +25,7 @@ func ExampleNew() {
 		Seed:               42,
 		InitialVesselCount: 2,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -50,6 +54,7 @@ func ExampleSimulator_Advance() {
 		Seed:               42,
 		InitialVesselCount: simulation.MaxVessels,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -103,6 +108,7 @@ func ExampleSimulator_Elapse() {
 		Seed:               42,
 		InitialVesselCount: 1,
 		Speed:              0.5,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -145,6 +151,7 @@ func ExampleSimulator_SetSpeed() {
 		Seed:               42,
 		InitialVesselCount: 1,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -184,6 +191,79 @@ func ExampleSimulator_SetSpeed() {
 	// resumed, elapse 1s: 1 reports, now 2030-01-02T03:04:07Z, paused false
 }
 
+// Station edits use the station set revision to detect concurrent changes.
+// A name-only edit keeps the RF revision; any receiving setting increases it.
+func ExampleSimulator_AddStation() {
+	ctx := context.Background()
+	sim, err := simulation.New(simulation.Config{
+		ID:                 "test-run",
+		StartTime:          time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+		Seed:               42,
+		InitialVesselCount: 1,
+		Speed:              1,
+		Transmitter:        transmitter,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	show := func(step string, stations simulation.StationSet, err error) bool {
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
+		fmt.Printf("%s: set revision %d\n", step, stations.Revision)
+		for _, station := range stations.Stations {
+			fmt.Printf("  %s %q config %d rf %d created %s\n", station.ID, station.Definition.Name,
+				station.ConfigRevision, station.RFRevision, station.CreatedAt.Format(time.RFC3339))
+		}
+		return true
+	}
+	if _, err := sim.Advance(ctx, 2*time.Second); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	site := simulation.StationDefinition{
+		Name: "Pier", Latitude: 51.95, Longitude: 4.14, Enabled: true,
+		AntennaHeightMeters: 15, ReceiveGainDBi: 2, FeederLossDB: 3,
+		ChannelA: simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -108},
+		ChannelB: simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -108},
+	}
+	id, stations, err := sim.AddStation(sim.Stations().Revision, site)
+	if !show("add", stations, err) {
+		return
+	}
+	site.Name = "Harbour pier"
+	stations, err = sim.UpdateStation(stations.Revision, id, site)
+	if !show("rename", stations, err) {
+		return
+	}
+	site.ChannelB.Enabled = false
+	stations, err = sim.UpdateStation(stations.Revision, id, site)
+	if !show("disable channel B", stations, err) {
+		return
+	}
+	_, err = sim.UpdateStation(1, id, site)
+	fmt.Println("stale revision:", errors.Is(err, simulation.ErrConflict))
+	stations, err = sim.RemoveStation(stations.Revision, id)
+	if !show("remove", stations, err) {
+		return
+	}
+	_, err = sim.RemoveStation(stations.Revision, id)
+	fmt.Println("removed station:", errors.Is(err, simulation.ErrNotFound))
+	// Output:
+	// add: set revision 2
+	//   station-1 "Pier" config 1 rf 1 created 2030-01-02T03:04:07Z
+	// rename: set revision 3
+	//   station-1 "Harbour pier" config 2 rf 1 created 2030-01-02T03:04:07Z
+	// disable channel B: set revision 4
+	//   station-1 "Harbour pier" config 3 rf 2 created 2030-01-02T03:04:07Z
+	// stale revision: true
+	// remove: set revision 5
+	// removed station: true
+}
+
 // A complete run through explicit virtual steps, scaled real time, and pause.
 func ExampleSimulator() {
 	ctx := context.Background()
@@ -193,6 +273,7 @@ func ExampleSimulator() {
 		Seed:               42,
 		InitialVesselCount: 2,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)

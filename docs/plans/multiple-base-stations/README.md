@@ -1,7 +1,8 @@
 # Multiple AIS base stations
 
-Status: proposed implementation plan. Prepared 2026-09-14. This folder changes
-documentation only. Implementation and its checks are future work.
+Status: in progress. Prepared 2026-09-14. Step 01 (station configuration) is
+implemented; steps 02-07 are future work. The "Current implementation" section
+describes the code before step 01.
 
 ## Goal and value
 
