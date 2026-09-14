@@ -3,16 +3,18 @@
 ## Running
 
 ```text
-go run ./cmd/ais-test-bench             # http://localhost:8080
-go run ./cmd/ais-test-bench -port 9000  # http://localhost:9000
+task run                                          # http://localhost:8080
+go run ./cmd/ais-test-bench -addr localhost:9000  # http://localhost:9000
 ```
 
-`-port` is the only command-line parameter. It must be 1-65535 and defaults to
-8080. The server binds to localhost only.
+`-addr` is the only command-line parameter, a `host:port` listen address. It
+defaults to `localhost:8080`. The host is required: an empty host such as
+`:8080` binds all interfaces, which triggers Microsoft Defender firewall prompts.
+The port must be 1-65535.
 
 ## Sequence
 
-1. `cmd/ais-test-bench` parses and validates `-port`.
+1. `cmd/ais-test-bench` parses and validates `-addr`.
 2. It creates a context cancelled on SIGINT or SIGTERM.
 3. It binds the listener, so a busy port fails before anything else starts.
 4. `app.Run` builds the `ui` handler, which parses the shared templates. A

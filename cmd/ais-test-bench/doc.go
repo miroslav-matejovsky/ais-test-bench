@@ -2,8 +2,8 @@
 //
 // Usage:
 //
-//	ais-test-bench [-port 8080]
+//	ais-test-bench [-addr localhost:8080]
 //
-// It listens on localhost at the given port, runs internal/app until SIGINT or
-// SIGTERM, and exits non-zero on startup or shutdown failure.
+// It listens on the given host:port, runs internal/app until SIGINT or SIGTERM,
+// and exits non-zero on startup or shutdown failure. The host is required.
 package main

@@ -73,12 +73,13 @@ Use the Go version declared in `go.mod`. Checks use Task, PowerShell,
 golangci-lint, deadcode, and gotestsum.
 
 ```text
-go run ./cmd/ais-test-bench             # http://localhost:8080
-go run ./cmd/ais-test-bench -port 9000  # http://localhost:9000
+task run                                          # http://localhost:8080
+go run ./cmd/ais-test-bench -addr localhost:9000  # http://localhost:9000
 task all
 ```
 
-`-port` is the only parameter. The server binds to localhost.
+`-addr` (host:port) is the only parameter. The host is required, so the server
+never binds all interfaces by accident.
 
 Production concerns are part of the contracts: early validation, bounded queues,
 finite I/O deadlines, deterministic time, structured errors, observable connection

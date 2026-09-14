@@ -16,7 +16,7 @@ import (
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/app"
 )
 
-const defaultPort = 8080
+const defaultAddr = "localhost:8080"
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -30,7 +30,7 @@ func main() {
 }
 
 func run(args []string, logger *slog.Logger) error {
-	port, err := parsePort(args, os.Stderr)
+	addr, err := parseAddr(args, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -38,28 +38,42 @@ func run(args []string, logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ln, err := net.Listen("tcp", net.JoinHostPort("localhost", strconv.Itoa(port)))
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listen on port %d: %w", port, err)
+		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
 	return app.Run(ctx, logger, ln)
 }
 
-// parsePort parses the command-line arguments. The only flag is -port, the
-// HTTP port on localhost. It defaults to defaultPort and must be 1-65535.
-// Usage and flag errors are printed to output.
-func parsePort(args []string, output io.Writer) (int, error) {
+// parseAddr parses the command-line arguments. The only flag is -addr, the
+// HTTP listen address as host:port. It defaults to defaultAddr. The host is
+// required: an empty host binds all interfaces, which triggers firewall
+// prompts on Windows. The port must be 1-65535. Usage and flag errors are
+// printed to output.
+func parseAddr(args []string, output io.Writer) (string, error) {
 	fs := flag.NewFlagSet("ais-test-bench", flag.ContinueOnError)
 	fs.SetOutput(output)
-	port := fs.Int("port", defaultPort, "HTTP port to listen on (localhost)")
+	addr := fs.String("addr", defaultAddr, "HTTP listen address as host:port; host is required")
 	if err := fs.Parse(args); err != nil {
-		return 0, fmt.Errorf("parse arguments: %w", err)
+		return "", fmt.Errorf("parse arguments: %w", err)
 	}
 	if fs.NArg() > 0 {
-		return 0, fmt.Errorf("unexpected arguments: %v", fs.Args())
+		return "", fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
-	if *port < 1 || *port > 65535 {
-		return 0, fmt.Errorf("port %d out of range 1-65535", *port)
+
+	host, portText, err := net.SplitHostPort(*addr)
+	if err != nil {
+		return "", fmt.Errorf("invalid -addr %q: %w", *addr, err)
 	}
-	return *port, nil
+	if host == "" {
+		return "", fmt.Errorf("invalid -addr %q: host is required, e.g. %s", *addr, defaultAddr)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		return "", fmt.Errorf("invalid -addr %q: port: %w", *addr, err)
+	}
+	if port < 1 || port > 65535 {
+		return "", fmt.Errorf("invalid -addr %q: port %d out of range 1-65535", *addr, port)
+	}
+	return *addr, nil
 }

@@ -6,7 +6,7 @@ adapters are implemented; keep third-party types outside domain contracts.
 | Choice | Status | Purpose and boundary | Primary source |
 | --- | --- | --- | --- |
 | net/http, html/template, embed, io/fs | Used | HTTP serving, server-rendered UI, embedded assets | [Go standard library](https://pkg.go.dev/std) |
-| context, os/signal, log/slog, flag | Used | Cancellation, process signals, structured logs, `-port` flag | [Go standard library](https://pkg.go.dev/std) |
+| context, os/signal, log/slog, flag | Used | Cancellation, process signals, structured logs, `-addr` flag | [Go standard library](https://pkg.go.dev/std) |
 | htmx 4.0.0 | Used, vendored | Partial page updates; `internal/ui/assets/static/js/htmx.min.js` | [htmx 4 docs](https://four.htmx.org/docs/) |
 | stretchr/testify/require | Used in tests | Assertions | [require](https://pkg.go.dev/github.com/stretchr/testify/require) |
 | golang.org/x/sync/errgroup | Planned | Supervise HTTP, simulation, TCP, UDP workers with error propagation | [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup) |
