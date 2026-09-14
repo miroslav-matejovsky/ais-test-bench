@@ -11,51 +11,43 @@ import (
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 )
 
-func TestFleetJSON(t *testing.T) {
+func TestTargetJSON(t *testing.T) {
 	at := time.Date(2026, 9, 14, 12, 0, 5, 0, time.UTC)
-	bounds := simulatorapi.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4}
-	paused := simulatorapi.TimeState{Now: at.Add(500 * time.Millisecond), ElapsedMs: 5500, Speed: 0, Paused: true}
-	const head = `{"simulationId":"run-1","updatedAt":"2026-09-14T12:00:05Z",` +
-		`"time":{"now":"2026-09-14T12:00:05.5Z","elapsedMs":5500,"speed":0,"paused":true},` +
-		`"spawnBounds":{"south":52,"north":52.04,"west":3.94,"east":4},`
-
-	tests := []struct {
-		name  string
-		fleet display.Fleet
-		want  string
-	}{
-		{
-			name:  "empty fleet",
-			fleet: display.Fleet{SimulationID: "run-1", UpdatedAt: at, Time: paused, SpawnBounds: bounds, Vessels: []display.Vessel{}},
-			want:  head + `"vessels":[]}`,
+	channel := simulatorapi.ReceiverChannel{Enabled: true, SensitivityDBm: -110}
+	target := display.Target{
+		MMSI: 200000002, AgeMs: 1500, Status: "fresh",
+		Report: display.Reception{
+			StationID: "s1", Sequence: 18446744073709551615, TransmissionSequence: 9, MMSI: 200000002, MessageType: 1,
+			Channel: "B", ReceivedAt: at, Sentence: "!AIVDM\r\n",
+			Navigation:     display.Navigation{Speed: new(8.0), UTCSecond: new(5)},
+			Scenario:       display.Scenario{Name: "Vessel 2", CategoryID: "cargo"},
+			ConfigRevision: 2, RFRevision: 1,
+			Receiver: simulatorapi.ReceiverSnapshot{Name: "Coast", Latitude: 52, Longitude: 4, AntennaHeightMeters: 30, Channel: channel},
+			Signal:   display.Signal{EstimatedPowerDBm: -80.5, EffectiveSensitivityDBm: -110, MarginDB: 29.5, Probability: 1, DistanceMeters: 5000},
 		},
-		{
-			name: "available navigation",
-			fleet: display.Fleet{SimulationID: "run-1", UpdatedAt: at, Time: paused, SpawnBounds: bounds, Vessels: []display.Vessel{{
-				MMSI: 200000001, Name: "Vessel 1", TypeID: "cargo", TypeName: "Cargo vessel",
-				Latitude: new(52.01), Longitude: new(3.95), Speed: new(10.5), Course: new(45.0), Heading: new(45), UpdatedAt: at,
-			}}},
-			want: head + `"vessels":[
-				{"mmsi":200000001,"name":"Vessel 1","typeId":"cargo","typeName":"Cargo vessel","latitude":52.01,"longitude":3.95,"speed":10.5,"course":45,"heading":45,"updatedAt":"2026-09-14T12:00:05Z"}]}`,
-		},
-		{
-			name: "unavailable navigation is null",
-			fleet: display.Fleet{SimulationID: "run-1", UpdatedAt: at, Time: paused, SpawnBounds: bounds, Vessels: []display.Vessel{{
-				MMSI: 200000002, Name: "Vessel 2", TypeID: "cargo", TypeName: "Cargo vessel", UpdatedAt: at,
-			}}},
-			want: head + `"vessels":[
-				{"mmsi":200000002,"name":"Vessel 2","typeId":"cargo","typeName":"Cargo vessel","latitude":null,"longitude":null,"speed":null,"course":null,"heading":null,"updatedAt":"2026-09-14T12:00:05Z"}]}`,
-		},
+		Stations: []display.TargetStation{{
+			StationID: "s1", StationEnabled: true, Sequence: 18446744073709551615, TransmissionSequence: 9, ReceivedAt: at,
+			Channel: "B", EstimatedPowerDBm: -80.5, RFRevision: 1, CurrentRFRevision: true, AgeMs: 1500, Status: "fresh", Chosen: true,
+		}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := json.Marshal(tt.fleet)
-			require.NoError(t, err)
-			require.JSONEq(t, tt.want, string(data))
+	const want = `{"mmsi":200000002,"ageMs":1500,"status":"fresh",
+		"report":{"stationId":"s1","sequence":"18446744073709551615","transmissionSequence":"9","mmsi":200000002,"messageType":1,
+			"channel":"B","receivedAt":"2026-09-14T12:00:05Z","sentence":"!AIVDM\r\n",
+			"navigation":{"latitude":null,"longitude":null,"speed":8,"course":null,"heading":null,"utcSecond":5},
+			"scenario":{"name":"Vessel 2","categoryId":"cargo"},"configRevision":"2","rfRevision":"1",
+			"receiver":{"name":"Coast","latitude":52,"longitude":4,"antennaHeightMeters":30,"receiveGainDbi":0,"feederLossDb":0,
+				"channel":{"enabled":true,"sensitivityDbm":-110,"noisePenaltyDb":0,"dropProbability":0}},
+			"signal":{"estimatedPowerDbm":-80.5,"effectiveSensitivityDbm":-110,"marginDb":29.5,"probability":1,
+				"distanceMeters":5000,"bearingDegrees":null,"horizonMeters":0,"shadowLossDb":0}},
+		"stations":[{"stationId":"s1","stationEnabled":true,"sequence":"18446744073709551615","transmissionSequence":"9",
+			"receivedAt":"2026-09-14T12:00:05Z","channel":"B","estimatedPowerDbm":-80.5,"rfRevision":"1","currentRfRevision":true,
+			"ageMs":1500,"status":"fresh","chosen":true}]}`
 
-			var decoded display.Fleet
-			require.NoError(t, json.Unmarshal(data, &decoded))
-			require.Equal(t, tt.fleet, decoded)
-		})
-	}
+	data, err := json.Marshal(target)
+	require.NoError(t, err)
+	require.JSONEq(t, want, string(data))
+
+	var decoded display.Target
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.Equal(t, target, decoded)
 }

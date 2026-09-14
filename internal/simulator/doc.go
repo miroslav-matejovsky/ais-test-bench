@@ -13,6 +13,16 @@
 // state besides the driver, so combined composition can mount one API handler
 // on several listeners.
 //
+// Station routes add, replace, and remove receiving sites with expected run and
+// station-set revisions. They use a separate 64 KiB JSON reader, require every
+// definition field, and return field-addressed validation errors. Station and
+// observation responses include atomically captured clock/settings; conversions
+// encode uint64 receiving identities as decimal strings and coverage as GeoJSON
+// MultiPolygon cut at the antimeridian. Reception pages have independent station
+// cursors and explicit eviction gaps. These routes expose received NMEA without
+// decoding navigation or changing the display component. All routes are available
+// through combined composition's public and private listeners.
+//
 // NewHandler composes the standalone simulator: the API, the manager page,
 // status, static assets, and a root redirect to /manager. Its navigation lists
 // only the manager.

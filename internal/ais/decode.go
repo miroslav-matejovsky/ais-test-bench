@@ -10,6 +10,7 @@ import (
 // means the report marks that value unavailable.
 type Report struct {
 	MMSI      uint32
+	Channel   Channel // Radio channel of the sentence, A or B.
 	Latitude  *float64
 	Longitude *float64
 	Speed     *float64
@@ -35,10 +36,11 @@ const (
 // type 1, the reports EncodePosition produces. go-nmea validates framing,
 // checksum, and payload armouring; this function decodes and validates fields.
 //
-// It rejects other talkers and sentence types, multipart sentences, payloads
-// that are not 168 bits, other message types, an MMSI outside 1-999999999, and
-// values outside their AIS ranges. Unavailable sentinels decode to nil. The
-// position is available only when both coordinates are.
+// It rejects other talkers and sentence types, multipart sentences, radio
+// channels other than A and B, payloads that are not 168 bits, other message
+// types, an MMSI outside 1-999999999, and values outside their AIS ranges.
+// Unavailable sentinels decode to nil. The position is available only when both
+// coordinates are.
 func DecodePosition(sentence string) (Report, error) {
 	parsed, err := nmea.Parse(sentence)
 	if err != nil {
@@ -50,6 +52,10 @@ func DecodePosition(sentence string) (Report, error) {
 	}
 	if vdm.NumFragments != 1 || vdm.FragmentNumber != 1 {
 		return Report{}, fmt.Errorf("unsupported multipart sentence: fragment %d of %d", vdm.FragmentNumber, vdm.NumFragments)
+	}
+	channel := Channel(vdm.Channel)
+	if channel != ChannelA && channel != ChannelB {
+		return Report{}, fmt.Errorf("unsupported radio channel %q: want A or B", vdm.Channel)
 	}
 	bits := vdm.Payload
 	if len(bits) != positionBits {
@@ -77,7 +83,7 @@ func DecodePosition(sentence string) (Report, error) {
 	if mmsi < 1 || mmsi > maxMMSI {
 		return Report{}, fmt.Errorf("invalid MMSI %d", mmsi)
 	}
-	report := Report{MMSI: uint32(mmsi)}
+	report := Report{MMSI: uint32(mmsi), Channel: channel}
 
 	lon, lat := signed(61, 28), signed(89, 27)
 	if lon != lonUnavailable && (lon < -180*coordinateScale || lon > 180*coordinateScale) {

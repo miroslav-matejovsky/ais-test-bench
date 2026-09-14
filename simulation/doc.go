@@ -4,15 +4,125 @@
 //	import "github.com/miroslav-matejovsky/ais-test-bench/simulation"
 //
 // It owns synthetic vessels, their latest AIS reports, a bounded in-memory AIS
-// history, and a virtual clock. A seeded random source creates cargo vessels in
-// the North Sea that move at their reported speed and course.
+// history, receiving stations with their receptions and observed targets, and a
+// virtual clock. A seeded random source creates cargo vessels in the North Sea
+// that move at their reported speed and course.
 //
 // # Configuration
 //
 // New takes an explicit Config: run identity, start instant, seed, initial
-// vessel count, and speed. The engine never reads a clock, sleeps, starts
-// goroutines, or uses global randomness. The same implementation, Config, and
-// ordered calls produce the same sentences, timestamps, MMSIs, and sequences.
+// vessel count, speed, reference transmitter, and receiving stations. The engine
+// never reads a clock, sleeps, starts goroutines, or uses global randomness, and
+// never fills in defaults: a zero TransmitterProfile or StationDefinition is
+// invalid. The same implementation, Config, and ordered calls produce the same
+// sentences, timestamps, MMSIs, and sequences.
+//
+// # Receiving stations
+//
+// A station is a synthetic shore receiving site: position, antenna height,
+// receive gain, feeder loss, channel A and B capability, and up to
+// MaxShadowSectors bearing sectors with extra loss. Config.Stations holds 0
+// through MaxStations definitions; zero stations is valid. TransmitterProfile is
+// the one run-level transmitter every vessel uses and is published in
+// Metadata.Settings. Field docs state every range. Validation rejects non-finite
+// numbers before range checks. Stored definitions are canonical: longitude 180
+// becomes -180 and shadow sectors are sorted by start. Sectors must not overlap.
+//
+// New assigns IDs station-1, station-2, and so on in definition order.
+// AddStation allocates the next number, never reusing one, and never consumes
+// vessel randomness, so stations never change vessel reports. Every station has
+// a config revision, increased by every effective edit, and an RF revision,
+// increased by every edit except a name-only one. A no-op edit keeps both. The
+// StationSet revision starts at 1, increases with every effective add, edit, or
+// removal, and is the expected revision of the next edit. Station latitude is
+// limited to [-85, 85], the web map range.
+//
+// # Reception model
+//
+// One deterministic model estimates, per station channel and transmitter
+// position, the geodesic distance and bearing, a 4/3-earth radio horizon, the
+// received power from transmitter power and gains, free-space loss at the
+// channel frequency, a fixed site loss and path exponent, and shadow sector
+// loss. The margin against sensitivity plus noise penalty maps to a decode
+// probability through fixed knots, multiplied by a horizon taper and by one
+// minus the channel drop probability. Disabled stations and channels have
+// probability 0. Metadata.Settings.Reception publishes every parameter. The
+// values are empirical test-bench choices, not calibrated predictions.
+//
+// Sources for the reference terms, not for the empirical choices:
+//   - AIS 1 is 161.975 MHz and AIS 2 is 162.025 MHz:
+//     https://navcen.uscg.gov/international-vhf-marine-radio-channels-freq
+//   - Free-space loss 32.4 + 20 log10(f MHz) + 20 log10(d km) dB, ITU-R P.525-5
+//     section 2.3: https://www.itu.int/dms_pubrec/itu-r/rec/p/R-REC-P.525-5-202411-I!!PDF-E.pdf
+//   - Receiver sensitivity is a 20% packet error rate test point, not a hard
+//     threshold, ITU-R M.1371-6 Annex 2 Table 7:
+//     https://www.itu.int/rec/R-REC-M.1371-6-202602-I/en
+//   - Coverage depends on both antenna heights, installation losses, and
+//     obstructions, IALA G1111-2 sections 3.3 and 3.4:
+//     https://www.iala.int/product/g1111-2/?download=true
+//   - Class A nominal power 12.5 W: https://www.navcen.uscg.gov/ais-class-a-reports
+//
+// Assumptions of this model: the radio horizon uses k = 4/3, about
+// 4.12 * (sqrt(h_tx) + sqrt(h_rx)) km with heights in metres; the site loss,
+// path exponent, probability knots, and horizon taper are chosen so that
+// sensitivity, gain, and height differences stay visible inside the horizon.
+// Terrain, multipath, ducting, interference, and slot collisions are not modelled.
+//
+// Receive decisions hash the run seed, station ID, RF revision, and
+// transmission sequence into a uniform draw, so they never consume vessel
+// randomness and do not depend on batching or station order.
+//
+// Station.Coverage holds 0.9 and 0.5 probability contours per channel for
+// Settings.Transmitter, computed with the same function whenever the RF
+// revision changes. Rings sample every 5 degrees plus both sides of each shadow
+// sector boundary, and bisect each radius over the horizon.
+//
+// Station errors separate their causes: ErrInvalid for a rejected definition,
+// ErrConflict for a stale expected revision, ErrNotFound for an unknown ID, and
+// ErrLimit for MaxStations or an exhausted ID or revision range. Validation and
+// all checks complete before any change.
+//
+// # Receptions and observations
+//
+// Three identities stay separate. A transmission is one generated report,
+// identified by Message.Sequence, whether any station receives it or not. A
+// Reception is one station's successful decoding of a transmission, identified
+// by station ID and a per-station sequence that starts at 1 and stays
+// contiguous across RF edits. A target is one MMSI with the latest reception of
+// every station that received it. A Reception carries the exact sentence, the
+// full virtual timestamp (receive latency is not modelled), model diagnostics,
+// the station RF configuration, and scenario attribution, so it stays
+// meaningful after its transmission leaves History.
+//
+// Every generated report, including creation reports, is one opportunity at
+// every configured station, including disabled ones. ReceptionCounters count
+// opportunities since station creation by exclusive outcome and by channel;
+// RecentCounters count the last RateWindow in one-second buckets. Counters
+// survive RF edits, and Station.RFUpdatedAt tells whether a window spans RF
+// revisions.
+//
+// Observations is one consistent snapshot: clock, settings, stations with
+// counters, selected targets, recent receptions, and totals. A target's
+// navigation is the newest report a selected station actually received, so a
+// missed report never moves it, and it stays after its vessel leaves the fleet.
+// Several selected stations produce one target with the highest transmission
+// sequence, from the first station in creation order on ties, and mark which
+// stations received that transmission. Ages are virtual: fresh up to FreshAge,
+// stale up to StaleAge, then lost. Clock mutations remove observations at
+// ExpiryAge, also with an empty fleet; ages freeze while paused. The store
+// holds at most TargetLimit MMSIs and evicts the target whose newest reception
+// is oldest, lowest MMSI first, counting Observations.TargetEvictions.
+// RemoveStation removes the station's counters, history, and observations.
+//
+// ReceptionHistory pages through the newest ReceptionHistoryLimit receptions
+// of one station. Unlike the complete batches SetCount, Advance, and Elapse
+// return, it is finite: a cursor that falls behind it reports a Gap. Expiry and
+// eviction never remove history, and Observations rebuilds the live view after
+// any gap.
+// StationConfiguration captures station definitions together with metadata and
+// state revision under one read lock for HTTP configuration snapshots. Stations
+// remains the narrower configuration-only read. Reception receiver snapshots
+// preserve the station name at reception even after later renaming.
 //
 // # Virtual time
 //
@@ -39,14 +149,21 @@
 // reports already evicted from the MessageLimit history. Latest reports describe
 // exactly the active fleet. Sentences are checksummed type 1 !AIVDM lines
 // including CRLF; their UTC second field is the second of the report timestamp.
+// Each vessel alternates its reports between AIS channels A and B, starting on
+// A for an even MMSI and on B for an odd one.
 //
 // # Atomicity and concurrency
 //
 // Each mutation stages all state, including the random source, navigation,
-// sequence, clock, and scaling remainder, and commits only after every report
-// encoded and every context check passed. A failed call returns no reports and
-// changes no future result. Errors wrap ErrInvalid for rejected input and
-// ErrLimit for exceeded limits. One mutex makes all methods safe for concurrent
-// use, but reproducible output requires callers to order their mutations.
-// Fleet, History, Metadata, and returned reports are detached copies.
+// sequence, clock, scaling remainder, reception counters and sequences, and new
+// receptions. It commits only after every report encoded, every station
+// evaluated, every limit and context check passed; applying the staged
+// receptions cannot fail. A failed call returns no reports and changes no
+// future result, including reception decisions, observation ages, and
+// sequences. Observations.StateRevision increases with every effective commit.
+// Errors wrap ErrInvalid for rejected input and ErrLimit for exceeded limits.
+// One mutex makes all methods safe for concurrent use, but reproducible output
+// requires callers to order their mutations. Fleet, History, Metadata,
+// Stations, Observations, ReceptionHistory, and returned values are detached
+// copies.
 package simulation

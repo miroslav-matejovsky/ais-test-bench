@@ -5,4 +5,6 @@
 // the vendored htmx build and live UI scripts. Leaflet is loaded from a CDN;
 // OpenStreetMap supplies map tiles. Both are sub-filesystems, so callers never use the
 // html/ or static/ prefix.
+// The manager loads manager.js for fleet/time and stations.js for station tables,
+// revision-aware configuration forms, shadow sectors, and channel capability presets.
 package assets

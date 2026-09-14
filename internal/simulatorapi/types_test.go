@@ -72,6 +72,13 @@ func TestMetadataJSON(t *testing.T) {
 		"vesselTypes": [{ "id": "cargo", "name": "Cargo vessel" }],
 		"supportedMessageTypes": [1],
 		"settings": {
+			"maxStations":0,
+			"transmitter":{"powerWatts":0,"heightMeters":0,"gainDbi":0,"feederLossDb":0},
+			"reception":{"siteLossDb":0,"pathExponent":0,"effectiveEarthRadiusFactor":0,
+				"channelAFrequencyMhz":0,"channelBFrequencyMhz":0,"horizonTaperStart":0,
+				"zeroProbabilityMarginDb":0,"referenceProbability":0,"fullProbabilityMarginDb":0,"coverageThresholds":null},
+			"observation":{"receptionHistoryLimit":0,"targetLimit":0,"recentReceptionLimit":0,
+				"freshAgeMs":0,"staleAgeMs":0,"expiryAgeMs":0,"rateWindowMs":0},
 			"initialVesselCount": 1,
 			"maxVessels": 100,
 			"tickIntervalMs": 1000,

@@ -58,18 +58,27 @@ func TestRunServesCombinedComponents(t *testing.T) {
 	require.Contains(t, string(do(t, http.MethodGet, base+"/display", "")), "<h1>Display</h1>")
 
 	metadata := getJSON[simulatorapi.Metadata](t, base+"/api/metadata")
-	fleet := getJSON[simulatorapi.Fleet](t, base+"/api/vessels")
-	projection := getJSON[display.Fleet](t, base+"/display/api/vessels")
-	require.Equal(t, metadata.SimulationID, fleet.SimulationID)
+	upstream := getJSON[simulatorapi.Observations](t, base+"/api/observations")
+	projection := getJSON[display.Observations](t, base+"/display/api/observations?stations=all")
+	require.Equal(t, metadata.SimulationID, upstream.SimulationID)
 	require.Equal(t, metadata.SimulationID, projection.SimulationID, "public API and display client read one engine")
-	require.Len(t, projection.Vessels, 1)
-	require.Equal(t, fleet.Vessels[0].MMSI, projection.Vessels[0].MMSI)
-	require.NotNil(t, projection.Vessels[0].Latitude)
+	require.Len(t, projection.Stations, len(upstream.Stations))
+	require.NotEmpty(t, projection.Stations, "demonstration stations are configured")
+	for _, target := range projection.Targets {
+		require.Equal(t, target.MMSI, target.Report.MMSI)
+		require.NotEmpty(t, target.Report.Sentence)
+	}
+
+	first := projection.Stations[0]
+	selected := getJSON[display.Observations](t, base+"/display/api/observations?stations="+first.ID)
+	require.Equal(t, []string{first.ID}, selected.Selection)
+	page := getJSON[display.ReceptionPage](t, base+"/display/api/stations/"+first.ID+"/receptions?simulationId="+metadata.SimulationID)
+	require.Equal(t, first.ID, page.StationID)
+	require.True(t, page.Tail)
 
 	do(t, http.MethodPut, base+"/api/vessels", `{"count":3}`)
-	require.Len(t, getJSON[display.Fleet](t, base+"/display/api/vessels").Vessels, 3)
 	do(t, http.MethodPut, base+"/api/vessels", `{"count":0}`)
-	require.Empty(t, getJSON[display.Fleet](t, base+"/display/api/vessels").Vessels)
+	require.Equal(t, metadata.SimulationID, getJSON[display.Observations](t, base+"/display/api/observations").SimulationID)
 
 	// One engine emits each report once: sequences are consecutive.
 	history := getJSON[simulatorapi.History](t, base+"/api/messages")

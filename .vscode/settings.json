@@ -74,6 +74,8 @@
     "govulncheck",
     "healthz",
     "HTMX",
+    "httpserver",
+    "httptest",
     "LASTEXITCODE",
     "matejovsky",
     "mathrand",
@@ -83,6 +85,7 @@
     "overcomplicate",
     "pkgname",
     "RAIM",
+    "simdriver",
     "simulatorapi",
     "stretchr",
     "taskfile"

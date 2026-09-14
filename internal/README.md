@@ -1,22 +1,25 @@
 # Internal packages
 
 The simulator component uses the public root package `simulation` for the
-authoritative fleet, latest reports, in-memory messages, and metadata. Internal
-`simulation` is the real-time driver that paces that engine. `simulator` holds
+authoritative fleet, latest reports, in-memory messages, and metadata.
+`simdriver` is the real-time driver that paces that engine. `simulator` holds
 the HTTP API, engine-to-wire conversion, manager composition, and runtime.
 `simulatorapi` holds the simulator API wire types shared with its consumers.
+The simulator API exposes atomic station configuration and received-observation
+snapshots, bounded reception paging, and revision-checked station commands. The
+manager owns station editing; reception decisions remain in the engine.
 
-The display component is `display`: a simulator HTTP client, the NMEA-derived
-map projection, the display API, and its runtime. It never imports simulator
-state or runtime packages.
+The display component is `display`: a simulator HTTP client, the validated
+projection of received observations and station reception history with NMEA
+decoding, the display API, and its runtime. It never imports simulator state or
+runtime packages and never reads the truth fleet.
 
 Shared packages: `ais` encodes and decodes position reports, `ui` renders
 stateless HTML pages and serves static assets, `httpserver` runs HTTP servers
 with bounded shutdown, and `cli` validates listen addresses. `app` composes both
 components for the combined executable.
 
-The domain/application subpackages and the targets, networking, management, and
-visualization folders hold the original design contracts. Runtime services use
-the concrete packages directly. Package documentation lives in `doc.go`.
+Package documentation lives in `doc.go`. Allowed package dependencies are
+defined in [`.go-arch-lint.yml`](../.go-arch-lint.yml).
 
 See the [project README](../README.md) for the running architecture and API.

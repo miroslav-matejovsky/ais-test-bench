@@ -13,6 +13,9 @@ import (
 // These examples use only the public package and the standard library. They
 // need no server, network, or sleep.
 
+// transmitter is the reference transmitter of every example run.
+var transmitter = simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1}
+
 // New creates the initial fleet deterministically: the same Config always
 // yields the same vessels and sentences.
 func ExampleNew() {
@@ -22,6 +25,7 @@ func ExampleNew() {
 		Seed:               42,
 		InitialVesselCount: 2,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -36,7 +40,7 @@ func ExampleNew() {
 	fmt.Println("missing ID rejected:", errors.Is(err, simulation.ErrInvalid))
 	// Output:
 	// 1 200000000 2030-01-02T03:04:05Z !AIVDM,1,1,,A,12vg200P0w0B9jjMiLDPe0T:0000,0*1D
-	// 2 200000001 2030-01-02T03:04:05Z !AIVDM,1,1,,A,12vg20@P1n0B@wjMhDVo9Uf:0000,0*3E
+	// 2 200000001 2030-01-02T03:04:05Z !AIVDM,1,1,,B,12vg20@P1n0B@wjMhDVo9Uf:0000,0*3D
 	// missing ID rejected: true
 }
 
@@ -50,6 +54,7 @@ func ExampleSimulator_Advance() {
 		Seed:               42,
 		InitialVesselCount: simulation.MaxVessels,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -103,6 +108,7 @@ func ExampleSimulator_Elapse() {
 		Seed:               42,
 		InitialVesselCount: 1,
 		Speed:              0.5,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -145,6 +151,7 @@ func ExampleSimulator_SetSpeed() {
 		Seed:               42,
 		InitialVesselCount: 1,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)
@@ -184,6 +191,151 @@ func ExampleSimulator_SetSpeed() {
 	// resumed, elapse 1s: 1 reports, now 2030-01-02T03:04:07Z, paused false
 }
 
+// Station edits use the station set revision to detect concurrent changes.
+// A name-only edit keeps the RF revision; any receiving setting increases it.
+func ExampleSimulator_AddStation() {
+	ctx := context.Background()
+	sim, err := simulation.New(simulation.Config{
+		ID:                 "test-run",
+		StartTime:          time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+		Seed:               42,
+		InitialVesselCount: 1,
+		Speed:              1,
+		Transmitter:        transmitter,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	show := func(step string, stations simulation.StationSet, err error) bool {
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
+		fmt.Printf("%s: set revision %d\n", step, stations.Revision)
+		for _, station := range stations.Stations {
+			fmt.Printf("  %s %q config %d rf %d created %s\n", station.ID, station.Definition.Name,
+				station.ConfigRevision, station.RFRevision, station.CreatedAt.Format(time.RFC3339))
+		}
+		return true
+	}
+	if _, err := sim.Advance(ctx, 2*time.Second); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	site := simulation.StationDefinition{
+		Name: "Pier", Latitude: 51.95, Longitude: 4.14, Enabled: true,
+		AntennaHeightMeters: 15, ReceiveGainDBi: 2, FeederLossDB: 3,
+		ChannelA: simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -108},
+		ChannelB: simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -108},
+	}
+	id, stations, err := sim.AddStation(sim.Stations().Revision, site)
+	if !show("add", stations, err) {
+		return
+	}
+	site.Name = "Harbour pier"
+	stations, err = sim.UpdateStation(stations.Revision, id, site)
+	if !show("rename", stations, err) {
+		return
+	}
+	site.ChannelB.Enabled = false
+	stations, err = sim.UpdateStation(stations.Revision, id, site)
+	if !show("disable channel B", stations, err) {
+		return
+	}
+	_, err = sim.UpdateStation(1, id, site)
+	fmt.Println("stale revision:", errors.Is(err, simulation.ErrConflict))
+	stations, err = sim.RemoveStation(stations.Revision, id)
+	if !show("remove", stations, err) {
+		return
+	}
+	_, err = sim.RemoveStation(stations.Revision, id)
+	fmt.Println("removed station:", errors.Is(err, simulation.ErrNotFound))
+	// Output:
+	// add: set revision 2
+	//   station-1 "Pier" config 1 rf 1 created 2030-01-02T03:04:07Z
+	// rename: set revision 3
+	//   station-1 "Harbour pier" config 2 rf 1 created 2030-01-02T03:04:07Z
+	// disable channel B: set revision 4
+	//   station-1 "Harbour pier" config 3 rf 2 created 2030-01-02T03:04:07Z
+	// stale revision: true
+	// remove: set revision 5
+	// removed station: true
+}
+
+// Observations contains only what stations received. The second station drops
+// every channel B report, so its view of the vessel stays at the creation
+// report while the first station follows every report.
+func ExampleSimulator_Observations() {
+	ctx := context.Background()
+	channel := simulation.ReceiverChannel{Enabled: true, SensitivityDBm: -110}
+	dropB := channel
+	dropB.DropProbability = 1
+	sim, err := simulation.New(simulation.Config{
+		ID:                 "test-run",
+		StartTime:          time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+		Seed:               42,
+		InitialVesselCount: 1,
+		Speed:              1,
+		Transmitter:        transmitter,
+		Stations: []simulation.StationDefinition{
+			{Name: "Coast", Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: channel},
+			{Name: "No channel B", Latitude: 52, Longitude: 4, Enabled: true, AntennaHeightMeters: 25, ChannelA: channel, ChannelB: dropB},
+		},
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if _, err := sim.Advance(ctx, time.Second); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	all, err := sim.Observations(nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("transmissions %d, received transmissions %d, receptions %d\n", all.Transmissions, all.ReceivedTransmissions, all.Receptions)
+	for _, station := range all.Stations {
+		c := station.Counters
+		fmt.Printf("%s %q: opportunities %d, received %d, probabilistic loss %d\n",
+			station.Station.ID, station.Station.Definition.Name, c.Opportunities, c.Received, c.ProbabilisticLoss)
+	}
+	target := all.Targets[0]
+	fmt.Printf("all stations: vessel %d at transmission %d from %s, %s\n",
+		target.MMSI, target.Report.TransmissionSequence, target.Report.StationID, target.Status)
+	for _, observed := range target.Stations {
+		fmt.Printf("  %s last received transmission %d, chosen %t\n", observed.StationID, observed.TransmissionSequence, observed.Chosen)
+	}
+
+	only, err := sim.Observations([]string{"station-2"})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("station-2 only: transmission %d\n", only.Targets[0].Report.TransmissionSequence)
+	page, err := sim.ReceptionHistory("station-2", nil, 10)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, r := range page.Receptions {
+		fmt.Printf("station-2 reception %d: transmission %d on channel %s\n", r.Sequence, r.TransmissionSequence, r.Channel)
+	}
+	// Output:
+	// transmissions 2, received transmissions 2, receptions 3
+	// station-1 "Coast": opportunities 2, received 2, probabilistic loss 0
+	// station-2 "No channel B": opportunities 2, received 1, probabilistic loss 1
+	// all stations: vessel 200000000 at transmission 2 from station-1, fresh
+	//   station-1 last received transmission 2, chosen true
+	//   station-2 last received transmission 1, chosen false
+	// station-2 only: transmission 1
+	// station-2 reception 1: transmission 1 on channel A
+}
+
 // A complete run through explicit virtual steps, scaled real time, and pause.
 func ExampleSimulator() {
 	ctx := context.Background()
@@ -193,6 +345,7 @@ func ExampleSimulator() {
 		Seed:               42,
 		InitialVesselCount: 2,
 		Speed:              1,
+		Transmitter:        transmitter,
 	})
 	if err != nil {
 		fmt.Println(err)

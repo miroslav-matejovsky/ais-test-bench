@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/httpserver"
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
 

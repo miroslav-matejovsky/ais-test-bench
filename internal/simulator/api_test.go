@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
@@ -57,7 +57,10 @@ type fixture struct {
 
 func newFixture(t *testing.T) fixture {
 	t.Helper()
-	sim, err := simulation.New(simulation.Config{ID: "run-1", StartTime: start, Seed: 1, InitialVesselCount: 1, Speed: 1})
+	sim, err := simulation.New(simulation.Config{
+		ID: "run-1", StartTime: start, Seed: 1, InitialVesselCount: 1, Speed: 1,
+		Transmitter: simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
+	})
 	require.NoError(t, err)
 	clock := &testClock{now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)}
 	driver := simdriver.NewDriver(sim, clock)
@@ -147,6 +150,13 @@ func TestMetadataAPI(t *testing.T) {
 		"vesselTypes": [{"id": "cargo", "name": "Cargo vessel"}],
 		"supportedMessageTypes": [1],
 		"settings": {
+			"maxStations": 16,
+			"transmitter": {"powerWatts":12.5,"heightMeters":10,"gainDbi":2,"feederLossDb":1},
+			"reception": {"siteLossDb":15,"pathExponent":3.5,"effectiveEarthRadiusFactor":1.3333333333333333,
+				"channelAFrequencyMhz":161.975,"channelBFrequencyMhz":162.025,"horizonTaperStart":0.8,
+				"zeroProbabilityMarginDb":-12,"referenceProbability":0.8,"fullProbabilityMarginDb":6,"coverageThresholds":[0.9,0.5]},
+			"observation": {"receptionHistoryLimit":1000,"targetLimit":1000,"recentReceptionLimit":50,
+				"freshAgeMs":10000,"staleAgeMs":60000,"expiryAgeMs":600000,"rateWindowMs":60000},
 			"initialVesselCount": 1, "maxVessels": 100, "tickIntervalMs": 1000, "messageIntervalMs": 1000,
 			"pacingIntervalMs": 100, "messageHistoryLimit": 1000,
 			"speedKnots": {"min": 6, "max": 15.9},
@@ -253,7 +263,7 @@ func TestStandaloneRoutes(t *testing.T) {
 		{method: http.MethodGet, path: "/status", wantStatus: http.StatusOK, contains: []string{"Uptime:"}},
 		{method: http.MethodGet, path: "/static/js/manager.js", wantStatus: http.StatusOK},
 		{method: http.MethodGet, path: "/display", wantStatus: http.StatusNotFound},
-		{method: http.MethodGet, path: "/display/api/vessels", wantStatus: http.StatusNotFound},
+		{method: http.MethodGet, path: "/display/api/observations", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/api/unknown", wantStatus: http.StatusNotFound},
 		{method: http.MethodPost, path: "/api/vessels", wantStatus: http.StatusMethodNotAllowed},
 		{method: http.MethodDelete, path: "/api/messages", wantStatus: http.StatusMethodNotAllowed},

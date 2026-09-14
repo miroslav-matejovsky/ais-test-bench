@@ -1,7 +1,7 @@
 package simulator
 
 import (
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 	"github.com/miroslav-matejovsky/ais-test-bench/simulation"
 )
@@ -55,6 +55,10 @@ func metadataResponse(metadata simulation.Metadata) simulatorapi.Metadata {
 		VesselTypes:           types,
 		SupportedMessageTypes: append([]int{}, metadata.SupportedMessageTypes...),
 		Settings: simulatorapi.Settings{
+			MaxStations:         settings.MaxStations,
+			Transmitter:         simulatorapi.TransmitterProfile(settings.Transmitter),
+			Reception:           simulatorapi.ReceptionModel(settings.Reception),
+			Observation:         simulatorapi.ObservationSettings(settings.Observation),
 			InitialVesselCount:  settings.InitialVesselCount,
 			MaxVessels:          settings.MaxVessels,
 			TickIntervalMs:      settings.TickIntervalMs,

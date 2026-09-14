@@ -2,6 +2,7 @@
 
 {{define "page:head"}}
 <script defer src="/static/js/manager.js"></script>
+<script defer src="/static/js/stations.js"></script>
 {{end}}
 
 {{define "page:content"}}
@@ -29,6 +30,45 @@
 <p id="speed-help">Speed multiplies how fast simulation time passes; 0 pauses it. Vessels keep reporting their speed in knots.</p>
 <p id="speed-status" role="status"></p>
 <p id="fleet-status" role="status">Connecting...</p>
+<section aria-labelledby="stations-heading">
+    <h2 id="stations-heading">AIS base stations</h2>
+    <p>Configure synthetic receiving sites. Changes affect future transmissions. More negative sensitivity values receive weaker signals.</p>
+    <p id="station-status" role="status">Connecting to station configuration...</p>
+    <div class="table-scroll">
+        <table id="stations-table">
+            <caption>Receiving sites and capabilities</caption>
+            <thead><tr><th scope="col">Station</th><th scope="col">Location</th><th scope="col">Channels</th><th scope="col">Capabilities</th><th scope="col">Actions</th></tr></thead>
+            <tbody id="stations-body"></tbody>
+        </table>
+    </div>
+    <button id="station-new" type="button" disabled>Add station</button>
+    <details id="station-editor">
+        <summary>Station configuration editor</summary>
+        <p id="station-edit-label">Select a station or add one.</p>
+        <form id="station-form" class="station-form">
+            <fieldset id="station-fields" disabled>
+                <legend>Site and receiving capabilities</legend>
+                <div id="station-site-fields" class="station-grid"></div>
+                <div id="station-channel-fields" class="station-grid"></div>
+                <fieldset><legend>Shadow sectors</legend>
+                    <p>Clockwise from true north. Start is included; end is excluded. A start above the end wraps across north. Sectors must not overlap.</p>
+                    <div id="station-sectors"></div>
+                    <p id="station-sector-error" class="field-error"></p>
+                    <button id="station-add-sector" type="button">Add shadow sector</button>
+                </fieldset>
+                <p id="station-definition-error" class="field-error" role="alert"></p>
+                <button id="station-save" type="submit">Save station</button>
+                <button id="station-cancel" type="button">Discard draft</button>
+            </fieldset>
+        </form>
+        <div id="station-conflict" hidden>
+            <p>The server configuration changed. Your draft is preserved. Compare it with the current definition before retrying.</p>
+            <pre id="station-current"></pre>
+            <button id="station-rebase" type="button">Keep draft against this revision</button>
+        </div>
+    </details>
+    <p><a href="/api/stations">Station configuration JSON</a> | <a href="/api/observations">Received observations JSON</a></p>
+</section>
 <h2>Latest AIS messages</h2>
 <p id="history-note">The last 10 retained reports are shown here.</p>
 <pre id="messages">Loading messages...</pre>

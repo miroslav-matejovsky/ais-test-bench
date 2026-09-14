@@ -11,9 +11,10 @@ import (
 )
 
 func TestPositionRoundTrip(t *testing.T) {
-	for _, coordinates := range [][2]float64{{54.123456, 3.654321}, {-33.876543, -70.123456}, {90, 180}, {-90, -180}} {
+	for i, coordinates := range [][2]float64{{54.123456, 3.654321}, {-33.876543, -70.123456}, {90, 180}, {-90, -180}} {
+		channel := []ais.Channel{ais.ChannelA, ais.ChannelB}[i%2]
 		p := ais.Position{MMSI: 234567890, Latitude: coordinates[0], Longitude: coordinates[1], Speed: 12.3, Course: 359.99, Heading: 359, UpdatedAt: time.Date(2026, 9, 14, 12, 30, 42, 0, time.UTC)}
-		sentence, err := ais.EncodePosition(p)
+		sentence, err := ais.EncodePosition(p, channel)
 		require.NoError(t, err)
 		require.Contains(t, sentence, "\r\n")
 		parsed, err := nmea.Parse(sentence)
@@ -22,7 +23,7 @@ func TestPositionRoundTrip(t *testing.T) {
 		require.True(t, ok)
 		require.EqualValues(t, 1, report.NumFragments)
 		require.EqualValues(t, 1, report.FragmentNumber)
-		require.Equal(t, "A", report.Channel)
+		require.Equal(t, string(channel), report.Channel)
 		require.Len(t, report.Payload, 168)
 		read := func(start, width int, signed bool) int64 {
 			var value int64
@@ -62,8 +63,12 @@ func TestPositionRejectsInvalidData(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := ais.Position{MMSI: 234567890, UpdatedAt: time.Now()}
 			change(&p)
-			_, err := ais.EncodePosition(p)
+			_, err := ais.EncodePosition(p, ais.ChannelA)
 			require.Error(t, err)
 		})
+	}
+	for _, channel := range []ais.Channel{"", "a", "1", "AB"} {
+		_, err := ais.EncodePosition(ais.Position{MMSI: 234567890, UpdatedAt: time.Now()}, channel)
+		require.ErrorContains(t, err, "channel")
 	}
 }

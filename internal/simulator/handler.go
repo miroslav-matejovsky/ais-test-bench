@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	"github.com/miroslav-matejovsky/ais-test-bench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
 )
 

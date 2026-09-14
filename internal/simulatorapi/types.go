@@ -103,15 +103,19 @@ type VesselType struct {
 // TickIntervalMs and MessageIntervalMs are virtual milliseconds;
 // PacingIntervalMs is real milliseconds between elapsed-time deliveries.
 type Settings struct {
-	InitialVesselCount  int         `json:"initialVesselCount"`
-	MaxVessels          int         `json:"maxVessels"`
-	TickIntervalMs      int64       `json:"tickIntervalMs"`
-	MessageIntervalMs   int64       `json:"messageIntervalMs"`
-	PacingIntervalMs    int64       `json:"pacingIntervalMs"`
-	MessageHistoryLimit int         `json:"messageHistoryLimit"`
-	SpeedKnots          SpeedRange  `json:"speedKnots"`
-	Speed               SpeedLimits `json:"speed"`
-	SpawnBounds         SpawnBounds `json:"spawnBounds"`
+	MaxStations         int                 `json:"maxStations"`
+	Transmitter         TransmitterProfile  `json:"transmitter"`
+	Reception           ReceptionModel      `json:"reception"`
+	Observation         ObservationSettings `json:"observation"`
+	InitialVesselCount  int                 `json:"initialVesselCount"`
+	MaxVessels          int                 `json:"maxVessels"`
+	TickIntervalMs      int64               `json:"tickIntervalMs"`
+	MessageIntervalMs   int64               `json:"messageIntervalMs"`
+	PacingIntervalMs    int64               `json:"pacingIntervalMs"`
+	MessageHistoryLimit int                 `json:"messageHistoryLimit"`
+	SpeedKnots          SpeedRange          `json:"speedKnots"`
+	Speed               SpeedLimits         `json:"speed"`
+	SpawnBounds         SpawnBounds         `json:"spawnBounds"`
 }
 
 // SpeedRange is an inclusive speed range in knots, in 0.1-knot increments.

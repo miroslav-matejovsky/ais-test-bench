@@ -33,7 +33,14 @@ tasks:
     cmds:
       - go fmt ./...
       - echo fmt done
-  
+
+  arch-lint:
+    desc: Run go-arch-lint to check package dependencies and architectural rules
+    silent: true
+    cmds:
+      - go-arch-lint check
+      - echo arch-lint done
+
   lint:
     desc: Run golangci-lint
     silent: true
@@ -66,6 +73,7 @@ tasks:
       - task vet
       - task fmt
       - task deadcode
+      - task arch-lint
       - task lint
       - task test
       - echo all done
@@ -89,6 +97,14 @@ tasks:
     silent: true
     cmds:
       - go run ./cmd/display -addr localhost:8081 -simulator-url http://localhost:8000
+
+# ---- release ----
+
+  release:
+    desc: Tag and push a release (VERSION=1.2.3 or v1.2.3). Go module release via git tag only, no artifacts.
+    silent: true
+    cmds:
+      - pwsh -NoProfile -NonInteractive -File taskfile/release.ps1 -Version "{{.VERSION}}"
 
 # ---- maintenance tasks ----
 
