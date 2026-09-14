@@ -1,4 +1,4 @@
-# AIS Test Bench
+# AIS TestBench
 
 A local AIS simulator with a live vessel map and a manager UI. One random vessel
 starts automatically in the North Sea off Rotterdam. The manager can set the fleet
