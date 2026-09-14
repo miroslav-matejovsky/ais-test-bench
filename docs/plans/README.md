@@ -24,4 +24,3 @@ Each plan contains assessment.md that contains the assessment of the impact, fea
 
 | Plan | Backlog priority | Outcome |
 | --- | ---: | --- |
-| [Multiple AIS base stations](multiple-base-stations/README.md) | Not ranked | Deterministic station reception, coverage overlays, and AIS target inspection through separate simulator and display components |

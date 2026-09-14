@@ -3,6 +3,4 @@
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
 
-- multiple AIS base stations: user manual verification (checklist in
-  docs/plans/multiple-base-stations/07-verification-and-documentation.md), then remove the plan folder
 - support to simulate failures of AIS base stations
