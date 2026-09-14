@@ -2,7 +2,3 @@
 
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
-
-- `manager.js` (metadata limits, history envelope, count form) and `display.js` (marker reconciliation, null positions,
-  run change, view retention, map asset failures) have no automated tests in the repository. They were verified once
-  with a headless Edge script outside the repository; add a repeatable browser test when a JS toolchain is acceptable.
