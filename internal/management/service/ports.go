@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/app/config"
 	simulationdomain "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation/domain"
 	targetdomain "github.com/miroslav-matejovsky/ais-test-bench/internal/targets/domain"
 )
@@ -27,10 +26,8 @@ type TargetManager interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// SystemReader exposes effective startup configuration and operational status.
-// Returned values must be detached copies, including configuration slices.
+// SystemReader exposes operational status.
 type SystemReader interface {
-	Configuration(ctx context.Context) (config.Config, error)
 	Status(ctx context.Context) (SystemStatus, error)
 }
 

@@ -6,13 +6,10 @@ Every Go package has a `doc.go`. Directory-only context roots have a README.
 
 | Package | Purpose and responsibilities | Public contracts/data | Allowed dependencies |
 | --- | --- | --- | --- |
-| cmd/ais-test-bench | One executable entry point and process exit status | main, wiring example | app, standard library |
-| internal/app | Composition, rollback, resource ownership, supervision | ConfigLoader, Bootstrapper, Worker, Runtime, HTTPServer | All contexts, api, config, web, standard library, errgroup |
-| internal/app/config | Immutable YAML schema and validation requirements | Config, Server, Simulation, TCP, UDP, Logging, UI | Standard library |
-| internal/api | Mount REST, UIs, health, metrics | Routes | net/http, handlers, middleware |
-| internal/api/handlers | Decode requests, invoke use cases, map errors/results | Concrete handlers planned | dto, management/service, visualization/service, simulation/application, net/http |
-| internal/api/middleware | Request IDs, recovery, bounds, access logs, metrics | Middleware | net/http, logging, metrics libraries |
-| internal/api/dto | Versioned JSON transport values | Error | Standard library |
+| cmd/ais-test-bench | Entry point: `-port` flag, signals, listener, exit status | main | app, standard library |
+| internal/app | Composition root, HTTP server lifecycle, graceful shutdown | Run | All contexts, ui, standard library |
+| internal/ui | Server-rendered Manager and Display UIs using html/template and htmx | NewHandler | ui/assets, management/service, visualization/service, simulation/application, net/http |
+| internal/ui/assets | Embedded templates and static files, including vendored htmx | HTMLFiles, StaticFiles | embed, io/fs |
 | internal/simulation/domain | Scenarios, lifecycle state, playback snapshots, events | Scenario, State, Status, Event | Standard library |
 | internal/simulation/application | Simulation commands, virtual time, scenario persistence, orchestration | Simulator, ScenarioRepository, Clock, TargetStepper, TrafficGenerator, EventBus | Own domain, targets/domain, standard library |
 | internal/simulation/infrastructure | Scenario storage, pacing, event delivery, cross-context orchestration adapters | Concrete adapters planned | Own application/domain, targets/application/domain, ais/application/domain, storage libraries |
@@ -24,21 +21,19 @@ Every Go package has a `doc.go`. Directory-only context roots have a README.
 | internal/targets/infrastructure | Vessel persistence and movement adapters | Concrete adapters planned | Own application/domain, storage libraries |
 | internal/networking/tcp | Listener, bounded client queues, stream writes, connection management | Concrete TCP adapter planned; implements AIS TCPPublisher | ais/domain, net, context, observability |
 | internal/networking/udp | Datagram destinations, broadcast options, queues, deadlines | Concrete UDP adapter planned; implements AIS UDPPublisher | ais/domain, net, context, observability |
-| internal/management/service | Validated CRUD, startup config views, system status | ScenarioManager, TargetManager, SystemReader, SystemStatus | simulation/application/domain, targets/application/domain, app/config |
+| internal/management/service | Validated CRUD and system status | ScenarioManager, TargetManager, SystemReader, SystemStatus | simulation/application/domain, targets/application/domain |
 | internal/visualization/service | Consistent target projections, selection queries, chart metadata | TargetReader, Viewer, ChartCatalog, Snapshot, TargetView, Target, Chart | targets/domain, standard library |
-| web/admin | Independent embedded management distribution | Files (embed.FS) | embed |
-| web/viewer | Independent embedded visualization distribution | Files (embed.FS) | embed |
 
 "Planned" means a documented adapter slot, not a no-op implementation.
-Configuration is a leaf schema package; management may read it without importing
-the app composition package. Contexts never import HTTP handlers or frontend code.
+Contexts never import ui or app.
 
 ## Boundary contracts
 
 Repositories preserve contextual errors, return detached values, and make each
 save atomic. Application services distinguish invalid input, missing entities,
-and conflicts; HTTP maps these into 400, 404, and 409. Unexpected failures use 500
-with an opaque request ID. Concrete error types will be added with behavior.
+and conflicts; UI handlers map these into 400, 404, and 409 (422 for forms with
+validation errors). Unexpected failures use 500. Concrete error types will be
+added with behavior.
 
 Management orchestrates saved definitions through repositories. Simulation owns
 the active scenario and freezes initial vessel data. CRUD validation and active-run
@@ -51,8 +46,8 @@ AIS Reports and calls the AIS Generator. Reset AIS cadence on start/seek. The
 composition root injects concrete adapters; contexts do not import each other's
 infrastructure.
 
-The viewer reads the same snapshot owner through TargetReader. It never reads a
-partially updated tick. Caller-owned selection state remains in the browser.
+The Display UI reads the same snapshot owner through TargetReader. It never reads
+a partially updated tick. Caller-owned selection state remains in the browser.
 ChartCatalog abstracts local chart metadata; browser projection is presentation.
 
 EventBus is an optional, typed, in-process lifecycle notification port. Critical
@@ -61,6 +56,4 @@ Subscription queues are bounded; publishers receive overflow errors and may
 observe partial delivery across subscribers. Consumers resynchronize from Status.
 The event adapter owns closure and unsubscription; callers never close its channels.
 
-Each long-lived adapter has a blocking Run(context.Context) and bounded shutdown
-lifecycle, satisfying app contracts structurally. Domain and application packages
-never import app to declare that conformance.
+Each long-lived adapter has a blocking Run(context.Context) and a bounded shutdown.

@@ -1,4 +1,9 @@
 // Command ais-test-bench is the single process entry point.
-// It delegates configuration, construction, and shutdown to internal/app.
-// The current scaffold only reports its status; see docs/startup.md for wiring.
+//
+// Usage:
+//
+//	ais-test-bench [-port 8080]
+//
+// It listens on localhost at the given port, runs internal/app until SIGINT or
+// SIGTERM, and exits non-zero on startup or shutdown failure.
 package main

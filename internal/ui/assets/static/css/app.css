@@ -1,0 +1,19 @@
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+header {
+    display: flex;
+    gap: 2rem;
+    align-items: baseline;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.5rem;
+}
+
+nav {
+    display: flex;
+    gap: 1rem;
+}

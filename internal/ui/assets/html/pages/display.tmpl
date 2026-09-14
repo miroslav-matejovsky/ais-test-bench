@@ -1,0 +1,7 @@
+{{define "page:title"}}Display{{end}}
+
+{{define "page:content"}}
+<h1>Display</h1>
+<p>The live view of simulated vessels will live here.</p>
+<div hx-get="/status" hx-trigger="load, every 2s">Loading status...</div>
+{{end}}

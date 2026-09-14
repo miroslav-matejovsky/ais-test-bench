@@ -1,0 +1,24 @@
+{{define "base"}}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{template "page:title" .}} - AIS Test Bench</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script defer src="/static/js/htmx.min.js"></script>
+</head>
+<body>
+    <header>
+        <a href="/">AIS Test Bench</a>
+        <nav>
+            <a href="/manager">Manager</a>
+            <a href="/display">Display</a>
+        </nav>
+    </header>
+    <main>
+        {{template "page:content" .}}
+    </main>
+</body>
+</html>
+{{end}}

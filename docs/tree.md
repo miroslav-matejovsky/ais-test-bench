@@ -12,12 +12,8 @@ ais-test-bench/
 |-- cmd/
 |   |-- ais-test-bench/
 |   |   |-- doc.go
-|   |   `-- main.go
-|   `-- README.md
-|-- configs/
-|   |-- config.yaml
-|   `-- README.md
-|-- deployments/
+|   |   |-- main.go
+|   |   `-- main_test.go
 |   `-- README.md
 |-- docs/
 |   |-- dependencies.md
@@ -36,25 +32,10 @@ ais-test-bench/
 |   |   |-- infrastructure/
 |   |   |   `-- doc.go
 |   |   `-- README.md
-|   |-- api/
-|   |   |-- dto/
-|   |   |   |-- doc.go
-|   |   |   `-- error.go
-|   |   |-- handlers/
-|   |   |   `-- doc.go
-|   |   |-- middleware/
-|   |   |   |-- doc.go
-|   |   |   `-- middleware.go
-|   |   |-- doc.go
-|   |   `-- router.go
 |   |-- app/
-|   |   |-- config/
-|   |   |   |-- config.go
-|   |   |   `-- doc.go
-|   |   |-- bootstrap.go
-|   |   |-- doc.go
-|   |   |-- lifecycle.go
-|   |   `-- server.go
+|   |   |-- app.go
+|   |   |-- app_test.go
+|   |   `-- doc.go
 |   |-- management/
 |   |   |-- service/
 |   |   |   |-- doc.go
@@ -86,41 +67,37 @@ ais-test-bench/
 |   |   |-- infrastructure/
 |   |   |   `-- doc.go
 |   |   `-- README.md
+|   |-- ui/
+|   |   |-- assets/
+|   |   |   |-- html/
+|   |   |   |   |-- pages/
+|   |   |   |   |   |-- display.tmpl
+|   |   |   |   |   |-- home.tmpl
+|   |   |   |   |   |-- manager.tmpl
+|   |   |   |   |   `-- status.tmpl
+|   |   |   |   `-- base.tmpl
+|   |   |   |-- static/
+|   |   |   |   |-- css/
+|   |   |   |   |   `-- app.css
+|   |   |   |   `-- js/
+|   |   |   |       `-- htmx.min.js
+|   |   |   |-- doc.go
+|   |   |   `-- efs.go
+|   |   |-- doc.go
+|   |   |-- handlers.go
+|   |   |-- handlers_test.go
+|   |   `-- render.go
 |   |-- visualization/
 |   |   |-- service/
 |   |   |   |-- doc.go
 |   |   |   `-- ports.go
 |   |   `-- README.md
 |   `-- README.md
-|-- scripts/
-|   `-- README.md
 |-- taskfile/
 |   |-- clean.ps1
 |   |-- deadcode.ps1
 |   |-- README.md
 |   `-- test.ps1
-|-- test/
-|   |-- integration/
-|   |   `-- README.md
-|   |-- simulation/
-|   |   `-- README.md
-|   |-- testdata/
-|   |   `-- README.md
-|   `-- README.md
-|-- web/
-|   |-- admin/
-|   |   |-- assets/
-|   |   |   |-- index.html
-|   |   |   `-- README.md
-|   |   |-- assets.go
-|   |   `-- doc.go
-|   |-- viewer/
-|   |   |-- assets/
-|   |   |   |-- index.html
-|   |   |   `-- README.md
-|   |   |-- assets.go
-|   |   `-- doc.go
-|   `-- README.md
 |-- .env.template.ps1
 |-- .gitattributes
 |-- .gitignore
@@ -128,6 +105,7 @@ ais-test-bench/
 |-- AGENTS.md
 |-- CLAUDE.md
 |-- go.mod
+|-- go.sum
 |-- LICENSE
 |-- README.md
 `-- Taskfile.yml

@@ -1,4 +1,4 @@
 # Commands
 
-`ais-test-bench/` is the sole executable. It delegates resource ownership and wiring
-to `internal/app`. The current command reports scaffold status.
+`ais-test-bench/` is the sole executable. It parses the `-port` flag, listens on
+localhost, and delegates serving and shutdown to `internal/app`.

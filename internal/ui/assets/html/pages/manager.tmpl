@@ -1,0 +1,8 @@
+{{define "page:title"}}Manager{{end}}
+
+{{define "page:content"}}
+<h1>Manager</h1>
+<p>Scenarios, targets, and simulator control will live here.</p>
+<button hx-get="/status" hx-target="#status">Check server status</button>
+<div id="status"></div>
+{{end}}

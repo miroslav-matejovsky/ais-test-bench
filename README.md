@@ -4,16 +4,15 @@ AIS Test Bench is a local AIS simulation and testing environment for development
 integration, and demonstrations. The design generates synthetic vessel traffic
 and publishes AIS/NMEA over TCP and UDP. It uses no RF transmission.
 
-This repository is an initial architecture scaffold. Go packages contain domain
-values, public interfaces, configuration structs, and embedded UI placeholder
-assets. The executable reports scaffold status. Runtime services, REST behavior,
-and interactive frontends are intentionally left for implementation.
+This repository is in the design phase. The executable starts an HTTP server with
+placeholder Manager and Display UIs. Bounded contexts contain domain values and
+public interfaces; runtime services are not implemented yet.
 
 ## Architecture
 
-One executable, `cmd/ais-test-bench`, owns HTTP, REST, two frontends, simulation,
-and TCP/UDP publishing in a single process. A modular monolith keeps deployment
-local while preserving six DDD-inspired boundaries:
+One executable, `cmd/ais-test-bench`, owns HTTP, both UIs, simulation, and TCP/UDP
+publishing in a single process. A modular monolith keeps deployment local while
+preserving six DDD-inspired boundaries:
 
 | Context | Ownership |
 | --- | --- |
@@ -21,14 +20,14 @@ local while preserving six DDD-inspired boundaries:
 | AIS | Report generation, encoding, NMEA framing, publication contracts |
 | Targets | Vessels, navigation, tracks, deterministic movement models |
 | Networking | TCP clients, UDP destinations, bounded queues, socket lifecycle |
-| Management | Validated scenario/target CRUD, simulator control, system configuration/status |
+| Management | Validated scenario/target CRUD, simulator control, system status |
 | Visualization | Target projections, selection queries, local chart abstraction |
 
 ```mermaid
 flowchart LR
-    HTTP["REST /api/v1"] --> Management
-    HTTP --> Visualization
-    HTTP --> Simulation
+    Manager["Manager UI"] --> Management
+    Manager --> Simulation
+    Display["Display UI"] --> Visualization
     Management --> Simulation
     Management --> Targets
     Visualization --> Snapshots["Live target snapshots"]
@@ -46,53 +45,41 @@ domain packages use only the standard library. Cross-context mappings live in
 application-facing adapters. `internal/app` is the composition root.
 
 Interfaces live near consumers. Domain objects carry no HTTP, persistence, socket,
-or frontend dependencies. Admin and viewer share use cases and consistent
-snapshots through the API. The simulator alone controls virtual time. Direct
-calls handle the main traffic pipeline; a typed in-process event bus is reserved
-for lifecycle notifications.
+or UI dependencies. Manager and Display share use cases and consistent snapshots.
+The simulator alone controls virtual time. Direct calls handle the main traffic
+pipeline; a typed in-process event bus is reserved for lifecycle notifications.
 
-## Endpoints and frontends
+## User interfaces
 
-| Endpoint | Purpose |
+| Route | Purpose |
 | --- | --- |
-| /admin | Independent management UI: scenarios, targets, controls, system status |
-| /viewer | Independent viewer: charts, targets, AIS labels, selection, playback |
-| /api/v1 | Versioned JSON REST API |
-| /healthz | Operational health |
-| /metrics | Prometheus metrics |
+| /manager | Manager: scenarios, targets, simulator control, system status |
+| /display | Display: charts, targets, AIS labels, selection, playback |
 
-Two React builds are the initial frontend direction, with independent
-`web/admin/assets` and `web/viewer/assets` distributions embedded using `embed.FS`.
-Node is needed only when building frontends. HTMX + Templ is a documented
-alternative. See [web](web/README.md).
+Both UIs are server-rendered with `html/template` and htmx 4, in `internal/ui`.
+Templates, CSS, and a vendored htmx build are embedded in the binary, so no Node
+toolchain is needed. See [startup](docs/startup.md) for routes and rendering rules.
 
 ## Project guide
 
 - [Complete directory tree](docs/tree.md)
 - [Every package, interface, responsibility, and dependency](docs/packages.md)
-- [Bootstrap sequence, example main.go, router setup, graceful shutdown](docs/startup.md)
-- [Configuration schema and example config.yaml](configs/README.md)
-- [Recommended dependencies and sources](docs/dependencies.md)
-- [Unit, integration, and simulation testing](test/README.md)
-- [Deployment model](deployments/README.md)
+- [Startup, routes, rendering, shutdown](docs/startup.md)
+- [Dependencies and sources](docs/dependencies.md)
 
 ## Development
 
-Use the Go version declared in `go.mod`. The scaffold has no third-party runtime
-dependencies. Existing checks use Task, PowerShell, golangci-lint, deadcode, and
-gotestsum.
+Use the Go version declared in `go.mod`. Checks use Task, PowerShell,
+golangci-lint, deadcode, and gotestsum.
 
 ```text
-go build ./cmd/ais-test-bench
-go run ./cmd/ais-test-bench
+go run ./cmd/ais-test-bench             # http://localhost:8080
+go run ./cmd/ais-test-bench -port 9000  # http://localhost:9000
 task all
 ```
 
-The first two commands build/run the status-only scaffold. The future executable
-will load `config.yaml`; [configs/config.yaml](configs/config.yaml) documents
-loopback HTTP/TCP and an explicit local UDP destination.
+`-port` is the only parameter. The server binds to localhost.
 
 Production concerns are part of the contracts: early validation, bounded queues,
-finite I/O deadlines, deterministic time, startup rollback, structured errors,
-observable connection failures, and bounded shutdown. Concrete behavior and its
-tests remain listed in [.todo](.todo).
+finite I/O deadlines, deterministic time, structured errors, observable connection
+failures, and bounded shutdown. Remaining work is listed in [.todo](.todo).
