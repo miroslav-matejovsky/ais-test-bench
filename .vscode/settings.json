@@ -61,9 +61,14 @@
     ]
   },
   "cSpell.words": [
+    "deadcode",
+    "fe3dback",
     "frontends",
+    "golangci",
     "gopls",
+    "gotest",
     "gotestsum",
+    "govulncheck",
     "healthz",
     "HTMX",
     "LASTEXITCODE",
