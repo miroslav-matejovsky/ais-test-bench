@@ -98,6 +98,14 @@ tasks:
     cmds:
       - go run ./cmd/display -addr localhost:8081 -simulator-url http://localhost:8000
 
+# ---- release ----
+
+  release:
+    desc: Tag and push a release (VERSION=1.2.3 or v1.2.3). Go module release via git tag only, no artifacts.
+    silent: true
+    cmds:
+      - pwsh -NoProfile -NonInteractive -File taskfile/release.ps1 -Version "{{.VERSION}}"
+
 # ---- maintenance tasks ----
 
   vendor:
