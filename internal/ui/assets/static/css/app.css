@@ -42,3 +42,7 @@ button { cursor: pointer; }
 button:disabled { cursor: wait; }
 pre { padding: 1rem; background: #f1f5f7; overflow-x: auto; min-height: 5rem; }
 .vessel-details { white-space: pre-line; }
+.presets { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.clock { font-weight: 600; font-variant-numeric: tabular-nums; }
+.clock.stale { color: #8a4b00; }
+#map.stale { filter: grayscale(0.7); }

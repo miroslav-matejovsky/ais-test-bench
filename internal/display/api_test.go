@@ -47,7 +47,10 @@ type upstream struct {
 	fleet    simulatorapi.Fleet
 	metadata simulatorapi.Metadata
 	override http.HandlerFunc // Serves every request when set.
-	paths    []string
+	// editMetadata changes the encoded metadata object when set, for fields a
+	// Go value cannot omit.
+	editMetadata func(map[string]any)
+	paths        []string
 }
 
 func newUpstream(t *testing.T) *upstream {
@@ -58,11 +61,13 @@ func newUpstream(t *testing.T) *upstream {
 		},
 		metadata: simulatorapi.Metadata{
 			SimulationID: "run-1", StartedAt: reportTime,
+			Time:                  simulatorapi.TimeState{Now: reportTime, Speed: 1},
 			VesselTypes:           []simulatorapi.VesselType{{ID: "cargo", Name: "Cargo vessel"}},
 			SupportedMessageTypes: []int{1},
 			Settings: simulatorapi.Settings{
-				InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, MessageHistoryLimit: 1000,
+				InitialVesselCount: 1, MaxVessels: 100, TickIntervalMs: 1000, MessageIntervalMs: 1000, PacingIntervalMs: 100, MessageHistoryLimit: 1000,
 				SpeedKnots:  simulatorapi.SpeedRange{Min: 6, Max: 15.9},
+				Speed:       simulatorapi.SpeedLimits{Min: 0.01, Max: 100, Step: 0.01},
 				SpawnBounds: simulatorapi.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4},
 			},
 		},
@@ -75,7 +80,7 @@ func newUpstream(t *testing.T) *upstream {
 func (u *upstream) serve(w http.ResponseWriter, r *http.Request) {
 	u.mu.Lock()
 	u.paths = append(u.paths, r.URL.Path)
-	fleet, metadata, override := u.fleet, u.metadata, u.override
+	fleet, metadata, override, editMetadata := u.fleet, u.metadata, u.override, u.editMetadata
 	u.mu.Unlock()
 	if override != nil {
 		override(w, r)
@@ -87,6 +92,20 @@ func (u *upstream) serve(w http.ResponseWriter, r *http.Request) {
 		value = fleet
 	case "/api/metadata":
 		value = metadata
+		if editMetadata != nil {
+			data, err := json.Marshal(metadata)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			var fields map[string]any
+			if err := json.Unmarshal(data, &fields); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			editMetadata(fields)
+			value = fields
+		}
 	default:
 		http.NotFound(w, r)
 		return
@@ -141,6 +160,7 @@ func TestVesselsProjectsNMEA(t *testing.T) {
 	require.Equal(t, "run-1", fleet.SimulationID)
 	require.Equal(t, reportTime, fleet.UpdatedAt)
 	require.Equal(t, simulatorapi.SpawnBounds{South: 52, North: 52.04, West: 3.94, East: 4}, fleet.SpawnBounds)
+	require.Equal(t, simulatorapi.TimeState{Now: reportTime, Speed: 1}, fleet.Time)
 	require.Len(t, fleet.Vessels, 1)
 	vessel := fleet.Vessels[0]
 	require.Equal(t, uint32(200000001), vessel.MMSI)
@@ -207,6 +227,45 @@ func TestVesselsEmptyFleet(t *testing.T) {
 	require.Equal(t, []string{"/api/metadata", "/api/vessels"}, u.requestedPaths())
 }
 
+func TestVesselsForwardTime(t *testing.T) {
+	custom := time.Date(1999, 12, 31, 23, 59, 59, 0, time.UTC)
+	tests := []struct {
+		name  string
+		start time.Time
+		clock simulatorapi.TimeState
+	}{
+		{name: "custom date at fractional speed", start: custom, clock: simulatorapi.TimeState{Now: custom.Add(2500 * time.Millisecond), ElapsedMs: 2500, Speed: 0.25}},
+		{name: "paused", start: reportTime, clock: simulatorapi.TimeState{Now: reportTime, Paused: true}},
+		{name: "binary hundredths", start: reportTime, clock: simulatorapi.TimeState{Now: reportTime, Speed: 0.29}},
+		{name: "maximum speed", start: reportTime, clock: simulatorapi.TimeState{Now: reportTime, Speed: 100}},
+		// Separate reads of one run: the fleet is from a later tick than the clock.
+		{name: "fleet newer than clock", start: reportTime.Add(-10 * time.Second), clock: simulatorapi.TimeState{Now: reportTime.Add(-500 * time.Millisecond), ElapsedMs: 9500, Speed: 1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := newUpstream(t)
+			u.set(func(u *upstream) { u.metadata.StartedAt, u.metadata.Time = tt.start, tt.clock })
+
+			fleet := decodeFleet(t, fetch(newAPI(t, u)))
+
+			require.Equal(t, tt.clock, fleet.Time, "time is forwarded from metadata")
+			require.Equal(t, reportTime, fleet.Vessels[0].UpdatedAt)
+			require.InDelta(t, 52.01, *fleet.Vessels[0].Latitude, 1.0/600000, "navigation still comes from NMEA")
+		})
+	}
+}
+
+// editTime changes the encoded metadata time object.
+func editTime(change func(clock map[string]any)) func(*upstream) {
+	return func(u *upstream) {
+		u.editMetadata = func(metadata map[string]any) {
+			if clock, ok := metadata["time"].(map[string]any); ok {
+				change(clock)
+			}
+		}
+	}
+}
+
 func respond(status int, contentType, body string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", contentType)
@@ -234,6 +293,21 @@ func TestVesselsUpstreamFailures(t *testing.T) {
 		{"missing vessels", func(u *upstream) { u.fleet.Vessels = nil }, http.StatusBadGateway},
 		{"no vessel types", func(u *upstream) { u.metadata.VesselTypes = nil }, http.StatusBadGateway},
 		{"invalid spawn bounds", func(u *upstream) { u.metadata.Settings.SpawnBounds.North = 51 }, http.StatusBadGateway},
+		{"missing time", func(u *upstream) { u.editMetadata = func(m map[string]any) { delete(m, "time") } }, http.StatusBadGateway},
+		{"missing time.now", editTime(func(clock map[string]any) { delete(clock, "now") }), http.StatusBadGateway},
+		{"missing time.elapsedMs", editTime(func(clock map[string]any) { delete(clock, "elapsedMs") }), http.StatusBadGateway},
+		{"missing time.speed", editTime(func(clock map[string]any) { delete(clock, "speed") }), http.StatusBadGateway},
+		{"null time.speed", editTime(func(clock map[string]any) { clock["speed"] = nil }), http.StatusBadGateway},
+		{"string time.speed", editTime(func(clock map[string]any) { clock["speed"] = "1" }), http.StatusBadGateway},
+		{"missing time.paused", editTime(func(clock map[string]any) { delete(clock, "paused") }), http.StatusBadGateway},
+		{"negative elapsed", func(u *upstream) { u.metadata.Time.ElapsedMs = -1 }, http.StatusBadGateway},
+		{"time before start", func(u *upstream) { u.metadata.Time.Now = u.metadata.StartedAt.Add(-time.Nanosecond) }, http.StatusBadGateway},
+		{"speed over limit", func(u *upstream) { u.metadata.Time.Speed = 100.01 }, http.StatusBadGateway},
+		{"speed below minimum", func(u *upstream) { u.metadata.Time.Speed = 0.001 }, http.StatusBadGateway},
+		{"speed between steps", func(u *upstream) { u.metadata.Time.Speed = 0.015 }, http.StatusBadGateway},
+		{"paused while running", func(u *upstream) { u.metadata.Time.Paused = true }, http.StatusBadGateway},
+		{"running at speed 0", func(u *upstream) { u.metadata.Time.Speed = 0 }, http.StatusBadGateway},
+		{"invalid speed limits", func(u *upstream) { u.metadata.Settings.Speed.Step = 0 }, http.StatusBadGateway},
 		{"duplicate MMSI", func(u *upstream) { u.fleet.Vessels = append(u.fleet.Vessels, u.fleet.Vessels[0]) }, http.StatusBadGateway},
 		{"missing type id", func(u *upstream) { u.fleet.Vessels[0].TypeID = "" }, http.StatusBadGateway},
 		{"missing report time", func(u *upstream) { u.fleet.Vessels[0].Report.Timestamp = time.Time{} }, http.StatusBadGateway},

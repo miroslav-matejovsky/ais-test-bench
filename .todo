@@ -2,3 +2,6 @@
 
 Actionable items and known unfinished work.
 Do not use this file for tracking progress or track finished work. If work is finished, then its finished; remove it from this file.
+
+- support to simulate multiple AIS base stations
+- support to simulate failures of AIS base stations

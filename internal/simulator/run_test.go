@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 )
@@ -48,7 +47,7 @@ func TestRunServesManagerAndAPI(t *testing.T) {
 	require.NoError(t, json.Unmarshal(get(t, base+"/api/vessels"), &fleet))
 	require.NotEmpty(t, metadata.SimulationID)
 	require.Equal(t, metadata.SimulationID, fleet.SimulationID)
-	require.Len(t, fleet.Vessels, simulation.InitialVesselCount)
+	require.Len(t, fleet.Vessels, 1)
 
 	cancel()
 	require.NoError(t, <-done)
@@ -64,11 +63,11 @@ func (l failingListener) Close() error              { close(l.closed); return ni
 func (l failingListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
 
 func TestServeFailureClosesListenerAndStopsEngine(t *testing.T) {
-	sim, handler := newHandler(t)
+	f := newFixture(t)
 	ln := failingListener{closed: make(chan struct{})}
 
-	// Serve returns only after the tick loop has exited.
-	err := simulator.Serve(t.Context(), slog.New(slog.DiscardHandler), ln, sim, handler)
+	// Serve returns only after the pacing loop has exited.
+	err := simulator.Serve(t.Context(), slog.New(slog.DiscardHandler), ln, f.driver, f.handler)
 
 	require.ErrorContains(t, err, "accept failed")
 	select {

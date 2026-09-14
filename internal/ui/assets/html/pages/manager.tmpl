@@ -6,14 +6,28 @@
 
 {{define "page:content"}}
 <h1>Manager</h1>
-<p>Manage the active fleet. New vessels start at random positions off Rotterdam.</p>
-<form id="vessel-form">
+<p>Manage the active fleet and simulation speed. New vessels start at random positions off Rotterdam.</p>
+<p id="sim-clock" class="clock">Simulation time: connecting...</p>
+<form id="vessel-form" aria-describedby="count-help">
     <label for="vessel-count">Number of vessels <span id="count-range"></span></label>
     <input id="vessel-count" name="count" type="number" min="0" step="1" required disabled>
-    <button id="apply-count" type="submit" disabled>Apply</button>
+    <button id="apply-count" type="submit" disabled>Apply count</button>
 </form>
-<p>Set the count to 0 to stop generating messages. Restarting resets the fleet and message history.</p>
+<p id="count-help">Set the count to 0 to stop generating messages. Restarting resets the fleet and message history.</p>
 <p id="save-status" role="status"></p>
+<form id="speed-form" aria-describedby="speed-help">
+    <label for="speed">Simulation speed <span id="speed-range"></span></label>
+    <input id="speed" name="speed" type="number" min="0" max="100" step="0.01" required disabled>
+    <button id="apply-speed" type="submit" disabled>Apply speed</button>
+    <span class="presets" role="group" aria-label="Speed presets">
+        <button type="button" data-speed="0" disabled>Pause</button>
+        <button type="button" data-speed="0.5" disabled>0.5x</button>
+        <button type="button" data-speed="1" disabled>1x</button>
+        <button type="button" data-speed="2" disabled>2x</button>
+    </span>
+</form>
+<p id="speed-help">Speed multiplies how fast simulation time passes; 0 pauses it. Vessels keep reporting their speed in knots.</p>
+<p id="speed-status" role="status"></p>
 <p id="fleet-status" role="status">Connecting...</p>
 <h2>Latest AIS messages</h2>
 <p id="history-note">The last 10 retained reports are shown here.</p>

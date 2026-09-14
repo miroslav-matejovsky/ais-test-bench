@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -102,6 +103,44 @@ func startServe(t *testing.T, public, internal net.Listener) (cancel func(), wai
 	return cancel, func() error { return <-done }
 }
 
+// put returns the status code and body of a JSON PUT request.
+func put(t *testing.T, url, body string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return resp.StatusCode, string(data)
+}
+
+func TestSpeedControlsSharedEngine(t *testing.T) {
+	public, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	internal := newTrackedListener(t, true)
+	cancel, wait := startServe(t, public, internal)
+	publicAPI, internalAPI := "http://"+public.Addr().String()+"/api", "http://"+internal.Addr().String()+"/api"
+
+	status, body := put(t, internalAPI+"/time", `{"speed":2.5}`)
+	require.Equal(t, http.StatusOK, status, body)
+	status, body = get(t, publicAPI+"/metadata")
+	require.Equal(t, http.StatusOK, status, body)
+	require.Contains(t, body, `"speed":2.5,"paused":false`)
+
+	status, body = put(t, publicAPI+"/time", `{"speed":0}`)
+	require.Equal(t, http.StatusOK, status, body)
+	status, body = get(t, internalAPI+"/metadata")
+	require.Equal(t, http.StatusOK, status, body)
+	require.Contains(t, body, `"speed":0,"paused":true`, "both listeners control one engine")
+
+	// Shutdown uses real time while the simulation is paused.
+	cancel()
+	require.NoError(t, wait())
+}
+
 func TestDisplayReadsPrivateListener(t *testing.T) {
 	public, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -168,7 +207,7 @@ func TestServeStopsAllComponentsWhenServingFails(t *testing.T) {
 				public, internal = failing, healthy
 			}
 
-			// serve returns only after both servers and the tick loop have stopped.
+			// serve returns only after both servers and the pacing loop have stopped.
 			err := serve(t.Context(), slog.New(slog.DiscardHandler), public, internal)
 
 			require.ErrorContains(t, err, tt.wantErr)

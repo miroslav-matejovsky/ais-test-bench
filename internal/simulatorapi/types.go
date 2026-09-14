@@ -6,7 +6,8 @@ import "time"
 type Fleet struct {
 	// SimulationID is the opaque, nonempty identity of the engine run.
 	SimulationID string `json:"simulationId"`
-	// UpdatedAt is the UTC time of the latest tick or effective count change.
+	// UpdatedAt is the virtual UTC time of the latest tick or effective count
+	// change.
 	UpdatedAt time.Time `json:"updatedAt"`
 	// MessageCount is the number of reports currently retained in History.
 	MessageCount int `json:"messageCount"`
@@ -33,7 +34,7 @@ type Vessel struct {
 type Report struct {
 	// Sequence is the emission number within the simulation run.
 	Sequence uint64 `json:"sequence"`
-	// Timestamp is the full UTC generation time.
+	// Timestamp is the full virtual UTC generation time.
 	Timestamp time.Time `json:"timestamp"`
 	// Sentence is a complete type 1 !AIVDM sentence including CRLF.
 	Sentence string `json:"sentence"`
@@ -60,16 +61,35 @@ type Message struct {
 	Sentence  string    `json:"sentence"`
 }
 
-// Metadata describes one simulation run. It is immutable within a run.
+// Metadata describes one simulation run. Time changes as the run advances or
+// its speed changes; all other fields are fixed within a run.
 type Metadata struct {
 	SimulationID string `json:"simulationId"`
-	// StartedAt is the UTC engine start time.
+	// StartedAt is the initial virtual UTC instant. The applications start
+	// virtual time at the real startup instant.
 	StartedAt time.Time `json:"startedAt"`
+	// Time is the committed virtual clock.
+	Time TimeState `json:"time"`
 	// VesselTypes lists application categories, not numeric AIS ship types.
 	VesselTypes []VesselType `json:"vesselTypes"`
 	// SupportedMessageTypes lists the AIS message types the simulator emits.
 	SupportedMessageTypes []int    `json:"supportedMessageTypes"`
 	Settings              Settings `json:"settings"`
+}
+
+// TimeState is the committed virtual clock. It is not extrapolated and can
+// trail real pacing by one Settings.PacingIntervalMs plus processing time.
+type TimeState struct {
+	// Now is the virtual UTC instant, authoritative to nanoseconds. It advances
+	// between report ticks, so it can be later than the latest report.
+	Now time.Time `json:"now"`
+	// ElapsedMs is the virtual time since StartedAt in whole milliseconds,
+	// truncated.
+	ElapsedMs int64 `json:"elapsedMs"`
+	// Speed is the effective multiplier of virtual to real time. 0 pauses.
+	Speed float64 `json:"speed"`
+	// Paused is true when Speed is 0.
+	Paused bool `json:"paused"`
 }
 
 // VesselType is one application vessel category.
@@ -80,13 +100,17 @@ type VesselType struct {
 
 // Settings are the effective generation settings. The live vessel count is
 // len(Fleet.Vessels); InitialVesselCount is only the startup count.
+// TickIntervalMs and MessageIntervalMs are virtual milliseconds;
+// PacingIntervalMs is real milliseconds between elapsed-time deliveries.
 type Settings struct {
 	InitialVesselCount  int         `json:"initialVesselCount"`
 	MaxVessels          int         `json:"maxVessels"`
 	TickIntervalMs      int64       `json:"tickIntervalMs"`
 	MessageIntervalMs   int64       `json:"messageIntervalMs"`
+	PacingIntervalMs    int64       `json:"pacingIntervalMs"`
 	MessageHistoryLimit int         `json:"messageHistoryLimit"`
 	SpeedKnots          SpeedRange  `json:"speedKnots"`
+	Speed               SpeedLimits `json:"speed"`
 	SpawnBounds         SpawnBounds `json:"spawnBounds"`
 }
 
@@ -94,6 +118,14 @@ type Settings struct {
 type SpeedRange struct {
 	Min float64 `json:"min"`
 	Max float64 `json:"max"`
+}
+
+// SpeedLimits is the accepted running simulation speed range and precision.
+// Speed 0 is the separate pause value.
+type SpeedLimits struct {
+	Min  float64 `json:"min"`
+	Max  float64 `json:"max"`
+	Step float64 `json:"step"`
 }
 
 // SpawnBounds is the area for new vessels in decimal degrees. South and West
@@ -109,4 +141,10 @@ type SpawnBounds struct {
 // or null count can be rejected.
 type CountRequest struct {
 	Count *int `json:"count"`
+}
+
+// TimeRequest is the PUT /api/time body. Speed is a pointer so a missing or
+// null speed can be rejected while 0 pauses.
+type TimeRequest struct {
+	Speed *float64 `json:"speed"`
 }

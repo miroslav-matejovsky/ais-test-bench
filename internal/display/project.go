@@ -1,19 +1,46 @@
 package display
 
 import (
+	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ais"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulatorapi"
 )
 
+// speedStepTolerance accepts binary float representations of valid speed steps.
+const speedStepTolerance = 1e-6
+
+// upstreamMetadata decodes simulatorapi.Metadata with a presence-aware time, so
+// a missing or null time field differs from a valid zero. The outer Time field
+// shadows the embedded one when decoding.
+type upstreamMetadata struct {
+	simulatorapi.Metadata
+	Time *upstreamTime `json:"time"`
+}
+
+type upstreamTime struct {
+	Now       *time.Time `json:"now"`
+	ElapsedMs *int64     `json:"elapsedMs"`
+	Speed     *float64   `json:"speed"`
+	Paused    *bool      `json:"paused"`
+}
+
 // project validates a fleet against metadata from the same run and decodes
 // every report. Navigation comes only from the NMEA payloads; names and type
-// IDs come from the fleet, type names from metadata. Any invalid vessel fails
-// the whole projection, so a corrupt report never looks like a removed vessel.
-// Reads from different runs return errUnavailable; other violations errInvalid.
-func project(fleet simulatorapi.Fleet, metadata simulatorapi.Metadata) (Fleet, error) {
+// IDs come from the fleet, type names and the clock from metadata. Any invalid
+// vessel fails the whole projection, so a corrupt report never looks like a
+// removed vessel. Reads from different runs return errUnavailable; other
+// violations errInvalid. Fleet and clock may come from adjacent ticks of one run.
+func project(fleet simulatorapi.Fleet, upstream upstreamMetadata) (Fleet, error) {
+	metadata := upstream.Metadata
 	if err := validateMetadata(metadata); err != nil {
+		return Fleet{}, fmt.Errorf("%w: metadata: %w", errInvalid, err)
+	}
+	clock, err := validateTime(upstream.Time, metadata.StartedAt, metadata.Settings.Speed)
+	if err != nil {
 		return Fleet{}, fmt.Errorf("%w: metadata: %w", errInvalid, err)
 	}
 	switch {
@@ -47,6 +74,7 @@ func project(fleet simulatorapi.Fleet, metadata simulatorapi.Metadata) (Fleet, e
 	return Fleet{
 		SimulationID: fleet.SimulationID,
 		UpdatedAt:    fleet.UpdatedAt,
+		Time:         clock,
 		SpawnBounds:  metadata.Settings.SpawnBounds,
 		Vessels:      vessels,
 	}, nil
@@ -69,6 +97,36 @@ func validateMetadata(metadata simulatorapi.Metadata) error {
 		return fmt.Errorf("invalid spawnBounds %+v", b)
 	}
 	return nil
+}
+
+// validateTime checks the metadata clock: all fields present, now not before
+// startedAt, nonnegative elapsed time, speed 0 or within limits on a step, and
+// paused exactly when speed is 0.
+func validateTime(clock *upstreamTime, startedAt time.Time, limits simulatorapi.SpeedLimits) (simulatorapi.TimeState, error) {
+	if clock == nil {
+		return simulatorapi.TimeState{}, errors.New("time is required")
+	}
+	if clock.Now == nil || clock.ElapsedMs == nil || clock.Speed == nil || clock.Paused == nil {
+		return simulatorapi.TimeState{}, errors.New("time.now, time.elapsedMs, time.speed, and time.paused are required")
+	}
+	now, elapsed, speed, paused := *clock.Now, *clock.ElapsedMs, *clock.Speed, *clock.Paused
+	if now.Before(startedAt) {
+		return simulatorapi.TimeState{}, fmt.Errorf("time.now %s is before startedAt", now.Format(time.RFC3339Nano))
+	}
+	if elapsed < 0 {
+		return simulatorapi.TimeState{}, fmt.Errorf("time.elapsedMs %d is negative", elapsed)
+	}
+	if limits.Min <= 0 || limits.Max < limits.Min || limits.Step <= 0 {
+		return simulatorapi.TimeState{}, fmt.Errorf("invalid settings.speed %+v", limits)
+	}
+	steps := speed / limits.Step
+	if speed != 0 && (speed < limits.Min || speed > limits.Max || math.Abs(steps-math.Round(steps)) > speedStepTolerance) {
+		return simulatorapi.TimeState{}, fmt.Errorf("time.speed %v is not 0 or %v-%v in steps of %v", speed, limits.Min, limits.Max, limits.Step)
+	}
+	if paused != (speed == 0) {
+		return simulatorapi.TimeState{}, fmt.Errorf("time.paused %t disagrees with time.speed %v", paused, speed)
+	}
+	return simulatorapi.TimeState{Now: now, ElapsedMs: elapsed, Speed: speed, Paused: paused}, nil
 }
 
 // projectVessel decodes the report of one vessel. An unknown type ID is shown

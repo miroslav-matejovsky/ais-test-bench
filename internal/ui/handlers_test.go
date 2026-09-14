@@ -34,15 +34,26 @@ func TestPages(t *testing.T) {
 			contains: []string{"<title>Home", `href="/manager"`, `href="/display"`},
 		},
 		{
-			name:        "manager page",
-			page:        (*ui.Pages).Manager,
-			contains:    []string{"<title>Manager", "<h1>Manager</h1>", `hx-get="/status"`, "/static/js/manager.js", `href="/api/messages"`},
+			name: "manager page",
+			page: (*ui.Pages).Manager,
+			contains: []string{
+				"<title>Manager", "<h1>Manager</h1>", `hx-get="/status"`, "/static/js/manager.js", `href="/api/messages"`,
+				`<label for="vessel-count">`, `<input id="vessel-count" name="count" type="number" min="0" step="1" required disabled>`,
+				`<button id="apply-count" type="submit" disabled>`,
+				`<label for="speed">`, `<input id="speed" name="speed" type="number" min="0" max="100" step="0.01" required disabled>`,
+				`<button id="apply-speed" type="submit" disabled>`,
+				`<button type="button" data-speed="0" disabled>Pause</button>`, `data-speed="0.5"`, `data-speed="2"`,
+				`id="speed-status" role="status"`, `id="save-status" role="status"`, `id="sim-clock"`,
+			},
 			notContains: []string{`href="/display"`},
 		},
 		{
-			name:     "display page",
-			page:     (*ui.Pages).Display,
-			contains: []string{"<title>Display", "<h1>Display</h1>", `id="map"`, "leaflet@1.9.4", "/static/js/display.js"},
+			name: "display page",
+			page: (*ui.Pages).Display,
+			contains: []string{
+				"<title>Display", "<h1>Display</h1>", `id="map"`, "leaflet@1.9.4", "/static/js/display.js",
+				`id="sim-clock"`, `id="live-status" role="status"`,
+			},
 		},
 		{
 			name:     "status full page",
@@ -110,6 +121,8 @@ func TestStatic(t *testing.T) {
 	for path, want := range map[string]int{
 		"/static/js/htmx.min.js": http.StatusOK,
 		"/static/js/manager.js":  http.StatusOK,
+		"/static/js/display.js":  http.StatusOK,
+		"/static/css/app.css":    http.StatusOK,
 		"/static/nope.js":        http.StatusNotFound,
 	} {
 		t.Run(path, func(t *testing.T) {

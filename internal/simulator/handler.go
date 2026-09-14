@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
+	simdriver "github.com/miroslav-matejovsky/ais-test-bench/internal/simulation"
 	"github.com/miroslav-matejovsky/ais-test-bench/internal/ui"
 )
 
@@ -16,7 +16,7 @@ import (
 //	GET /status     server status, a fragment for htmx partial requests
 //	GET /static/    embedded static files
 //	    /api/       simulator API, see NewAPI
-func NewHandler(logger *slog.Logger, sim *simulation.Simulator) (http.Handler, error) {
+func NewHandler(logger *slog.Logger, sim *simdriver.Driver) (http.Handler, error) {
 	pages, err := ui.NewPages(logger, []ui.Link{{Href: "/manager", Label: "Manager"}})
 	if err != nil {
 		return nil, fmt.Errorf("create pages: %w", err)
