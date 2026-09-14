@@ -24,4 +24,3 @@ Each plan contains assessment.md that contains the assessment of the impact, fea
 
 | Plan | Backlog priority | Outcome |
 | --- | ---: | --- |
-| [Shared simulation package and virtual time](shared-simulation-virtual-time/README.md) | User requested | Importable deterministic AIS simulation, adjustable virtual time, and synchronized manager/display |
