@@ -5,3 +5,8 @@ and techniques against the system's architecture and workflows. Each evaluation 
 
 Every evaluation identifies its sources, the repository revision reviewed, local evidence, and decisions or follow-up work.
 Revisit a decision when its stated trigger or the surrounding code changes.
+
+## Evaluations
+
+| Evaluation | Decision |
+| --- | --- |
