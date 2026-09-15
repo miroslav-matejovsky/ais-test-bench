@@ -37,9 +37,11 @@ func brokenHandlers(t *testing.T, logger *slog.Logger) map[string]http.Handler {
 	t.Helper()
 	client, err := display.New(brokenSource{})
 	require.NoError(t, err)
-	handler, err := display.NewHandler(logger, client)
+	api, err := display.NewHandler(display.Config{Client: client, Logger: logger})
 	require.NoError(t, err)
-	return map[string]http.Handler{"NewAPI": display.NewAPI(logger, client), "NewHandler": handler}
+	standalone, err := display.NewStandaloneHandler(display.StandaloneConfig{Client: client, Logger: logger})
+	require.NoError(t, err)
+	return map[string]http.Handler{"NewHandler": http.StripPrefix("/display/api", api), "NewStandaloneHandler": standalone}
 }
 
 func readObservations(ctx context.Context, handler http.Handler) *httptest.ResponseRecorder {
@@ -62,7 +64,7 @@ func TestSourceFailureLogsToSuppliedLogger(t *testing.T) {
 			require.Equal(t, "read simulator observations", record.Message)
 			require.Equal(t, "embedder", record.Attrs["app"])
 			require.Equal(t, "display", record.Attrs["bench.component"])
-			require.Equal(t, "/display/api/observations", record.Attrs["bench.path"])
+			require.Equal(t, "/observations", record.Attrs["bench.path"], "handlers log their local route path")
 			require.EqualValues(t, http.StatusBadGateway, record.Attrs["bench.status"])
 			require.ErrorIs(t, record.Attrs["bench.error"].(error), simulatorapi.ErrInvalidResponse)
 			require.Equal(t, "request-1", record.Context.Value(contextKey{}))
@@ -75,12 +77,12 @@ func TestIndependentDisplayHandlersUseTheirOwnLoggers(t *testing.T) {
 	second, secondLogger := hostLogger(slog.LevelInfo)
 	firstHandlers, secondHandlers := brokenHandlers(t, firstLogger), brokenHandlers(t, secondLogger)
 
-	readObservations(t.Context(), firstHandlers["NewAPI"])
 	readObservations(t.Context(), firstHandlers["NewHandler"])
+	readObservations(t.Context(), firstHandlers["NewStandaloneHandler"])
 	require.Len(t, first.Records(), 2)
 	require.Empty(t, second.Records())
 
-	readObservations(t.Context(), secondHandlers["NewAPI"])
+	readObservations(t.Context(), secondHandlers["NewHandler"])
 	require.Len(t, first.Records(), 2)
 	require.Len(t, second.Records(), 1)
 }

@@ -7,7 +7,9 @@
 // display gets a simulator HTTP client for the private listener, so combined
 // mode uses the same HTTP data path as separate processes and never hands engine
 // state to the display. The public listener also serves the home, manager,
-// display, and status pages and static assets, with navigation to both pages.
+// display, and status pages, assets at /assets/, the simulator API at /api/, and
+// the display API at /display/api/. Each local-route public handler is mounted
+// with http.StripPrefix, and pages use an explicit root-layout ui.Config.
 //
 // Any server or pacing-loop exit stops everything, including a driver failure
 // such as an exceeded catch-up limit. Shutdown drains public requests first

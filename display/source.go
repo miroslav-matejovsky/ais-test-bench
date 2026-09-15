@@ -37,11 +37,12 @@ func New(source Source) (*Client, error) {
 	return &Client{source: source}, nil
 }
 
-// NewClient constructs a client with its own HTTPSource for an HTTP(S) origin.
-// It validates the origin without connecting. Call CloseIdleConnections after
-// requests finish to release idle connections owned by this convenience client.
-func NewClient(simulatorURL string) (*Client, error) {
-	source, err := NewHTTPSource(HTTPConfig{Origin: simulatorURL})
+// NewClient constructs a client with its own HTTPSource for an HTTP(S) simulator
+// API base URL, such as "http://localhost:8000/api/". It validates the URL
+// without connecting. Call CloseIdleConnections after requests finish to release
+// idle connections owned by this convenience client.
+func NewClient(apiBase string) (*Client, error) {
+	source, err := NewHTTPSource(HTTPConfig{APIBase: apiBase})
 	if err != nil {
 		return nil, err
 	}
@@ -51,15 +52,6 @@ func NewClient(simulatorURL string) (*Client, error) {
 	}
 	client.owned = source
 	return client, nil
-}
-
-// Origin returns the HTTP source's scheme://host[:port], or empty for other
-// sources. A local source does not imply any browser navigation destination.
-func (c *Client) Origin() string {
-	if source, ok := c.source.(*HTTPSource); ok {
-		return source.Origin()
-	}
-	return ""
 }
 
 // CloseIdleConnections releases only the source created by NewClient. Sources

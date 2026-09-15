@@ -21,30 +21,37 @@ type api struct {
 	sim    *Simulator
 }
 
-// newAPI returns the simulator HTTP API for the engine paced by sim:
+// newAPI returns the simulator HTTP API for the engine paced by sim, with local
+// routes:
 //
-//	GET /api/vessels   simulatorapi.Fleet
-//	PUT /api/vessels   simulatorapi.CountRequest in, simulatorapi.Fleet out
-//	GET /api/messages  simulatorapi.History
-//	GET /api/metadata  simulatorapi.Metadata
-//	PUT /api/time      simulatorapi.TimeRequest in, simulatorapi.Metadata out
+//	GET    /vessels                  simulatorapi.Fleet
+//	PUT    /vessels                  simulatorapi.CountRequest in, simulatorapi.Fleet out
+//	GET    /messages                 simulatorapi.History
+//	GET    /metadata                 simulatorapi.Metadata
+//	PUT    /time                     simulatorapi.TimeRequest in, simulatorapi.Metadata out
+//	GET    /stations                 simulatorapi.StationSet
+//	POST   /stations                 simulatorapi.StationRequest in, simulatorapi.StationCreated out
+//	PUT    /stations/{id}            simulatorapi.StationRequest in, simulatorapi.StationSet out
+//	DELETE /stations/{id}            simulatorapi.StationSet
+//	GET    /observations             simulatorapi.Observations
+//	GET    /stations/{id}/receptions simulatorapi.ReceptionPage
 //
-// Mount it at /api/. The handler is stateless apart from sim, so mounting it on
-// several listeners serves one engine consistently. Logger must be non-nil.
+// The handler is stateless apart from sim, so mounting it on several listeners
+// serves one engine consistently. Logger must be non-nil.
 func newAPI(logger *slog.Logger, sim *Simulator) http.Handler {
 	a := &api{logger: logger, sim: sim}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/vessels", a.fleet)
-	mux.HandleFunc("PUT /api/vessels", a.setCount)
-	mux.HandleFunc("GET /api/messages", a.history)
-	mux.HandleFunc("GET /api/metadata", a.metadata)
-	mux.HandleFunc("PUT /api/time", a.setTime)
-	mux.HandleFunc("GET /api/stations", a.stations)
-	mux.HandleFunc("POST /api/stations", a.addStation)
-	mux.HandleFunc("PUT /api/stations/{id}", a.updateStation)
-	mux.HandleFunc("DELETE /api/stations/{id}", a.removeStation)
-	mux.HandleFunc("GET /api/observations", a.observations)
-	mux.HandleFunc("GET /api/stations/{id}/receptions", a.receptions)
+	mux.HandleFunc("GET /vessels", a.fleet)
+	mux.HandleFunc("PUT /vessels", a.setCount)
+	mux.HandleFunc("GET /messages", a.history)
+	mux.HandleFunc("GET /metadata", a.metadata)
+	mux.HandleFunc("PUT /time", a.setTime)
+	mux.HandleFunc("GET /stations", a.stations)
+	mux.HandleFunc("POST /stations", a.addStation)
+	mux.HandleFunc("PUT /stations/{id}", a.updateStation)
+	mux.HandleFunc("DELETE /stations/{id}", a.removeStation)
+	mux.HandleFunc("GET /observations", a.observations)
+	mux.HandleFunc("GET /stations/{id}/receptions", a.receptions)
 	return mux
 }
 

@@ -1,5 +1,7 @@
 /* global L */
 (() => {
+    // The component root supplies the public display API base, ending in "/".
+    const apiBase = document.querySelector("[data-ais-display]").dataset.apiBase;
     const el = id => document.getElementById(id);
     const text = (id, value) => { if (el(id).textContent !== value) el(id).textContent = value; };
     const fmt = (v, unit = "", digits = 1) => v == null ? "unavailable" : `${Number(v).toFixed(digits)} ${unit}`.trim();
@@ -300,7 +302,7 @@
         const token = generation, abort = new AbortController(); controller = abort;
         const timeout = setTimeout(() => abort.abort(), 7000);
         try {
-            const response = await fetch(`/display/api/observations?stations=${encodeURIComponent(selection.join(",") || "all")}`, { cache: "no-store", signal: abort.signal });
+            const response = await fetch(`${apiBase}observations?stations=${encodeURIComponent(selection.join(",") || "all")}`, { cache: "no-store", signal: abort.signal });
             if (token !== generation) return;
             if (response.status === 404 && selection.length) {
                 choose([]); text("selection-notice", "A selected station was removed. Switching to all stations."); return;
@@ -353,7 +355,7 @@
         try {
             const query = new URLSearchParams({ simulationId: run, limit: "200" });
             if (historyCursor !== null) query.set("after", historyCursor);
-            const response = await fetch(`/display/api/stations/${encodeURIComponent(id)}/receptions?${query}`, { cache: "no-store", signal: abort.signal });
+            const response = await fetch(`${apiBase}stations/${encodeURIComponent(id)}/receptions?${query}`, { cache: "no-store", signal: abort.signal });
             if (!current()) return;
             if (response.status === 409 || response.status === 404) {
                 resetHistory(id); historyBlocked = true;

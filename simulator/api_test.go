@@ -63,7 +63,7 @@ func newFixture(t *testing.T) fixture {
 	require.NoError(t, err)
 	clock := &testClock{now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)}
 	driver := simdriver.NewDriver(sim, clock)
-	handler, err := NewHandler(&Simulator{driver: driver, logger: slog.New(slog.DiscardHandler)})
+	handler, err := NewStandaloneHandler(&Simulator{driver: driver, logger: slog.New(slog.DiscardHandler), baseLogger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
 	return fixture{sim: sim, clock: clock, driver: driver, handler: handler}
 }
@@ -258,9 +258,12 @@ func TestStandaloneRoutes(t *testing.T) {
 		contains    []string
 		notContains []string
 	}{
-		{method: http.MethodGet, path: "/manager", wantStatus: http.StatusOK, contains: []string{"<h1>Manager</h1>", `<a href="/manager">Manager</a>`}, notContains: []string{`href="/display"`}},
+		{method: http.MethodGet, path: "/manager", wantStatus: http.StatusOK, contains: []string{"<h1>Manager</h1>", `<a href="/manager">Manager</a>`, `data-api-base="/api/"`, `hx-get="/status"`}, notContains: []string{`href="/display"`}},
+		{method: http.MethodPost, path: "/manager", wantStatus: http.StatusMethodNotAllowed},
 		{method: http.MethodGet, path: "/status", wantStatus: http.StatusOK, contains: []string{"Uptime:"}},
-		{method: http.MethodGet, path: "/static/js/manager.js", wantStatus: http.StatusOK},
+		{method: http.MethodGet, path: "/assets/js/manager.js", wantStatus: http.StatusOK},
+		{method: http.MethodGet, path: "/static/js/manager.js", wantStatus: http.StatusNotFound},
+		{method: http.MethodGet, path: "/vessels", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/display", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/display/api/observations", wantStatus: http.StatusNotFound},
 		{method: http.MethodGet, path: "/api/unknown", wantStatus: http.StatusNotFound},
@@ -286,4 +289,6 @@ func TestStandaloneRoutes(t *testing.T) {
 	rec := serve(f.handler, http.MethodGet, "/", "")
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "/manager", rec.Header().Get("Location"))
+	rec = serve(f.handler, http.MethodGet, "/?view=stations", "")
+	require.Equal(t, "/manager?view=stations", rec.Header().Get("Location"))
 }

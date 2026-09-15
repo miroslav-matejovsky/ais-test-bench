@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/miroslav-matejovsky/ais-testbench/display"
@@ -45,24 +46,27 @@ func run(args []string, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.addr, err)
 	}
-	return display.Run(ctx, logger, ln, cfg.client)
+	return display.Run(ctx, ln, display.StandaloneConfig{Client: cfg.client, Logger: logger, ManagerURL: cfg.managerURL})
 }
 
 // config is the validated command-line configuration.
 type config struct {
-	addr   string
-	client *display.Client
+	addr       string
+	client     *display.Client
+	managerURL string
 }
 
 // parseArgs parses the command-line arguments before any listener is bound.
 // -addr is the HTTP listen address as host:port, validated by
-// cli.ValidateListenAddr. -simulator-url is the simulator origin, validated by
-// display.NewClient. Usage and flag errors are printed to output.
+// cli.ValidateListenAddr. -simulator-url is the standalone simulator's base URL,
+// an origin with an optional path prefix. The display reads its API below
+// {url}/api/, validated by display.NewClient, and links {url}/manager. Usage and
+// flag errors are printed to output.
 func parseArgs(args []string, output io.Writer) (config, error) {
 	fs := flag.NewFlagSet("display", flag.ContinueOnError)
 	fs.SetOutput(output)
 	addr := fs.String("addr", defaultAddr, "HTTP listen address as host:port; host is required")
-	simulatorURL := fs.String("simulator-url", defaultSimulatorURL, "simulator origin as http(s)://host[:port]")
+	simulatorURL := fs.String("simulator-url", defaultSimulatorURL, "simulator base URL as http(s)://host[:port][/prefix]")
 	if err := fs.Parse(args); err != nil {
 		return config{}, fmt.Errorf("parse arguments: %w", err)
 	}
@@ -72,9 +76,10 @@ func parseArgs(args []string, output io.Writer) (config, error) {
 	if err := cli.ValidateListenAddr(*addr); err != nil {
 		return config{}, fmt.Errorf("-addr: %w", err)
 	}
-	client, err := display.NewClient(*simulatorURL)
+	base := strings.TrimSuffix(*simulatorURL, "/")
+	client, err := display.NewClient(base + "/api/")
 	if err != nil {
 		return config{}, fmt.Errorf("-simulator-url: %w", err)
 	}
-	return config{addr: *addr, client: client}, nil
+	return config{addr: *addr, client: client, managerURL: base + "/manager"}, nil
 }

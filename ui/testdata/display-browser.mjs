@@ -1,7 +1,7 @@
 // Optional browser regression check. Requires a running combined app with its
 // default stations and at least one reception, Node, and Chromium's CDP port.
 // Uses only GETs; deterministic display responses are injected in this browser.
-// See internal/ui/doc.go for invocation. No packages or frontend build needed.
+// See ui/testdata/README.md for invocation. No packages or frontend build needed.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

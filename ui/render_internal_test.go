@@ -2,11 +2,11 @@ package ui
 
 import (
 	"context"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 
@@ -16,17 +16,16 @@ import (
 type contextKey struct{}
 
 func TestRenderFailureLogsToSuppliedLogger(t *testing.T) {
-	templates := fstest.MapFS{"base.tmpl": {Data: []byte(`{{define "base"}}{{template "absent"}}{{end}}`)}}
-	html, err := newRenderer(templates, nil, "base.tmpl")
-	require.NoError(t, err)
+	broken := template.Must(template.New("").Parse(`{{define "document"}}{{template "absent"}}{{end}}`))
 	recorder := logtest.New(slog.LevelInfo, nil)
-	pages := &Pages{logger: slog.New(recorder).With("app", "host", "component", "ui"), html: html}
+	u := &UI{logger: slog.New(recorder).With("app", "host", "component", "ui"), pages: map[string]*template.Template{"broken": broken}}
 
 	ctx := context.WithValue(t.Context(), contextKey{}, "request-1")
 	rec := httptest.NewRecorder()
-	pages.render(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/broken", nil), nil, "base")
+	u.render(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/broken", nil), "broken", "document", pageData{})
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.NotContains(t, rec.Body.String(), "<", "no partial HTML is written")
 	records := recorder.Records()
 	require.Len(t, records, 1)
 	record := records[0]
@@ -35,7 +34,7 @@ func TestRenderFailureLogsToSuppliedLogger(t *testing.T) {
 	require.Equal(t, "host", record.Attrs["app"])
 	require.Equal(t, "ui", record.Attrs["component"])
 	require.Equal(t, "/broken", record.Attrs["path"])
-	require.Equal(t, "base", record.Attrs["template"])
+	require.Equal(t, "document", record.Attrs["template"])
 	require.ErrorContains(t, record.Attrs["error"].(error), "absent")
 	require.Equal(t, "request-1", record.Context.Value(contextKey{}))
 }

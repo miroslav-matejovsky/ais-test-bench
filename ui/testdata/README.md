@@ -19,7 +19,7 @@ profile and a local debugging port, then run the check from the repository root:
 $displayBrowserProfile = Join-Path $env:TEMP 'ais-display-browser-check'
 Start-Process -FilePath 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' -WindowStyle Hidden -ArgumentList @('--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=19222', ('--user-data-dir=' + $displayBrowserProfile), 'about:blank')
 $env:AIS_BROWSER_EVIDENCE = Join-Path $env:TEMP 'ais-display-evidence'
-node internal/ui/testdata/display-browser.mjs
+node ui/testdata/display-browser.mjs
 ```
 
 `AIS_BROWSER_ORIGIN` and `AIS_BROWSER_CDP` override the default app and debugging

@@ -8,5 +8,5 @@
 <!-- Fragments for the status page -->
 
 {{define "status:details"}}
-<p>Server time: {{.Now.Format "15:04:05"}}. Uptime: {{.Uptime}}.</p>
+<p>Server time: {{.Status.Now.Format "15:04:05"}}. Uptime: {{.Status.Uptime}}.</p>
 {{end}}

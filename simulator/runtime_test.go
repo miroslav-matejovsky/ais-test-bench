@@ -79,7 +79,7 @@ func TestRuntimeConstructionAndTermination(t *testing.T) {
 			require.Equal(t, before, sim.Stations())
 			_, err = sim.Observations(t.Context(), nil)
 			require.NoError(t, err, "terminal snapshots remain readable")
-			require.Equal(t, 503, serve(sim.API(), "PUT", "/api/vessels", `{"count":1}`).Code)
+			require.Equal(t, 503, serve(sim.API(), "PUT", "/vessels", `{"count":1}`).Code)
 			require.ErrorContains(t, sim.Run(t.Context()), "already started")
 		})
 	}
@@ -106,7 +106,7 @@ func TestLocalAndRemoteSourceParity(t *testing.T) {
 	require.NoError(t, err)
 	server := httptest.NewServer(sim.API())
 	t.Cleanup(server.Close)
-	remote, err := display.NewHTTPSource(display.HTTPConfig{Origin: server.URL})
+	remote, err := display.NewHTTPSource(display.HTTPConfig{APIBase: server.URL + "/"})
 	require.NoError(t, err)
 	t.Cleanup(remote.CloseIdleConnections)
 	localClient, err := display.New(sim)

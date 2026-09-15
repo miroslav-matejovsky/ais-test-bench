@@ -35,8 +35,9 @@ func stoppedSimulator(t *testing.T, config Config) *Simulator {
 	return sim
 }
 
-func putCount(ctx context.Context, handler http.Handler) *httptest.ResponseRecorder {
-	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/api/vessels", strings.NewReader(`{"count":2}`))
+// putCount sends a count change to path on handler.
+func putCount(ctx context.Context, handler http.Handler, path string) *httptest.ResponseRecorder {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPut, path, strings.NewReader(`{"count":2}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -56,7 +57,7 @@ func TestAPIFailureLogsToConfiguredLogger(t *testing.T) {
 	sim = stoppedSimulator(t, config)
 
 	ctx := context.WithValue(t.Context(), contextKey{}, "request-1")
-	require.Equal(t, http.StatusServiceUnavailable, putCount(ctx, sim.API()).Code)
+	require.Equal(t, http.StatusServiceUnavailable, putCount(ctx, sim.API(), "/vessels").Code)
 
 	records := recorder.Records()
 	require.Len(t, records, 1)
@@ -65,7 +66,7 @@ func TestAPIFailureLogsToConfiguredLogger(t *testing.T) {
 	require.Equal(t, "set vessel count", record.Message)
 	require.Equal(t, "embedder", record.Attrs["app"])
 	require.Equal(t, "simulator", record.Attrs["bench.component"])
-	require.Equal(t, "/api/vessels", record.Attrs["bench.path"])
+	require.Equal(t, "/vessels", record.Attrs["bench.path"])
 	require.EqualValues(t, 2, record.Attrs["bench.count"])
 	require.ErrorIs(t, record.Attrs["bench.error"].(error), simulatorapi.ErrUnavailable)
 	require.Equal(t, "request-1", record.Context.Value(contextKey{}))
@@ -77,14 +78,14 @@ func TestIndependentSimulatorsUseTheirOwnLoggers(t *testing.T) {
 	firstConfig, secondConfig := runtimeConfig(), runtimeConfig()
 	firstConfig.Logger, secondConfig.Logger = firstLogger, secondLogger
 	firstSim, secondSim := stoppedSimulator(t, firstConfig), stoppedSimulator(t, secondConfig)
-	secondHandler, err := NewHandler(secondSim)
+	secondHandler, err := NewStandaloneHandler(secondSim)
 	require.NoError(t, err)
 
-	putCount(t.Context(), firstSim.API())
+	putCount(t.Context(), firstSim.API(), "/vessels")
 	require.Len(t, first.Records(), 1)
 	require.Empty(t, second.Records())
 
-	putCount(t.Context(), secondHandler)
+	putCount(t.Context(), secondHandler, "/api/vessels")
 	require.Len(t, first.Records(), 1)
 	require.Len(t, second.Records(), 1)
 }
@@ -93,12 +94,12 @@ func TestLoggerPrecedenceAndDefault(t *testing.T) {
 	engine, engineLogger := hostLogger(slog.LevelInfo, nil)
 	config := runtimeConfig()
 	config.Simulation.Logger = engineLogger
-	putCount(t.Context(), stoppedSimulator(t, config).API())
+	putCount(t.Context(), stoppedSimulator(t, config).API(), "/vessels")
 	require.Len(t, engine.Records(), 1, "nil Config.Logger falls back to Simulation.Logger")
 
 	own, ownLogger := hostLogger(slog.LevelInfo, nil)
 	config.Logger = ownLogger
-	putCount(t.Context(), stoppedSimulator(t, config).API())
+	putCount(t.Context(), stoppedSimulator(t, config).API(), "/vessels")
 	require.Len(t, own.Records(), 1, "Config.Logger takes precedence")
 	require.Len(t, engine.Records(), 1)
 
@@ -109,7 +110,7 @@ func TestLoggerPrecedenceAndDefault(t *testing.T) {
 	slog.SetDefault(defaultLogger)
 	sim := stoppedSimulator(t, runtimeConfig())
 	require.Same(t, defaultLogger, slog.Default(), "construction never replaces the default logger")
-	putCount(t.Context(), sim.API())
+	putCount(t.Context(), sim.API(), "/vessels")
 	records := fallback.Records()
 	require.Len(t, records, 1)
 	require.Equal(t, "simulator", records[0].Attrs["component"])
@@ -123,8 +124,8 @@ func TestDisabledLogLevelsDoNotChangeResponses(t *testing.T) {
 		config := runtimeConfig()
 		config.Logger = logger
 		api := stoppedSimulator(t, config).API()
-		failed := putCount(t.Context(), api)
-		read := serve(api, http.MethodGet, "/api/vessels", "")
+		failed := putCount(t.Context(), api, "/vessels")
+		read := serve(api, http.MethodGet, "/vessels", "")
 		responses[i] = [2]string{failed.Result().Status + failed.Body.String(), read.Result().Status + read.Body.String()}
 	}
 	require.Equal(t, responses[0], responses[1])

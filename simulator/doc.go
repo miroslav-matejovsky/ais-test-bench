@@ -43,7 +43,8 @@
 //
 // # HTTP API
 //
-// Simulator.API builds the /api/* routes defined by package simulatorapi over one
+// Simulator.API builds the routes defined by package simulatorapi at local paths,
+// such as /vessels and /stations/{id}, over one
 // simulation driver. It maps public engine values to wire types with explicit
 // conversions, adding the driver's real pacing interval to metadata, and passes
 // NMEA sentences through exactly as generated, including CRLF. Reads return
@@ -66,12 +67,20 @@
 // decoding navigation or changing the display component. All routes are available
 // through combined composition's public and private listeners.
 //
-// NewHandler composes the standalone simulator: the API, the manager page,
-// status, static assets, and a root redirect to /manager. Its navigation lists
-// only the manager.
+// Hosts mount Simulator.API below a public API base and strip that base once:
+//
+//	mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))
+//
+// Station creation answers with the relative Location stations/{id}, which
+// resolves against the request URL and keeps the public prefix. The API sets no
+// CORS or authentication policy, so host middleware can protect reads and writes.
+//
+// NewStandaloneHandler composes the standalone simulator at the root path: the
+// API at /api/, the manager page, status, assets at /assets/, and a root redirect
+// to /manager that keeps the query. Its navigation lists only the manager.
 //
 // Package-level Run creates the demonstration configuration on the system clock
-// with the given logger and serves NewHandler. Serve runs Simulator.Run next to an HTTP server on a
+// with the given logger and serves NewStandaloneHandler. Serve runs Simulator.Run next to an HTTP server on a
 // caller-supplied listener and owns that listener. On
 // cancellation or a serving or pacing failure, HTTP drains within
 // a five-second shutdown timeout, then the pacing loop is stopped and joined.

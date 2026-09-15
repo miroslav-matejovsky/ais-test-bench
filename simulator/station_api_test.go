@@ -44,7 +44,7 @@ func addSite(t *testing.T, f fixture, revision uint64) simulatorapi.StationCreat
 	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	var result simulatorapi.StationCreated
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	require.Equal(t, "/api/stations/"+result.StationID, rec.Header().Get("Location"))
+	require.Equal(t, "stations/"+result.StationID, rec.Header().Get("Location"), "relative to the request URL")
 	return result
 }
 
@@ -266,7 +266,7 @@ func TestStationRuntimeDefaultsReceiveInitialReports(t *testing.T) {
 	sim, err := simulation.New(config)
 	require.NoError(t, err)
 	handler := newAPI(slog.New(slog.DiscardHandler), &Simulator{driver: simdriver.NewDriver(sim, &testClock{now: start})})
-	o := decode[simulatorapi.Observations](t, serve(handler, "GET", "/api/observations", ""))
+	o := decode[simulatorapi.Observations](t, serve(handler, "GET", "/observations", ""))
 	require.Len(t, o.Stations, 3)
 	require.Equal(t, uint64(1), o.Transmissions)
 	for _, s := range o.Stations {

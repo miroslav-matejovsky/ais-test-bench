@@ -1,13 +1,5 @@
-{{define "page:title"}}Display{{end}}
-
-{{define "page:head"}}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script defer src="/static/js/display.js"></script>
-{{end}}
-
-{{define "page:content"}}
-<h1>Display</h1>
+{{define "display"}}
+<div id="{{.ID}}" class="ais-display" data-ais-display data-api-base="{{.APIBase}}">
 <div id="display-view">
 <p>Received AIS observations. Estimated RF values and scenario labels are simulation data.</p>
 <p id="sim-clock" class="clock">Simulation time: waiting for data</p>
@@ -15,7 +7,7 @@
 <p id="fetch-time">Browser last fetched: waiting</p>
 <p id="selection-notice" role="status"></p>
 <p id="empty-stations" hidden>No base stations configured. Configure sites in the simulator manager.
-    {{range nav}}{{if or (eq .Label "Manager") (eq .Label "Simulator manager")}}<a href="{{.Href}}">Open manager</a>{{end}}{{end}}
+    {{with .ManagerURL}}<a href="{{.}}">Open manager</a>{{end}}
 </p>
 <fieldset><legend>Receiving stations (multiple selections show their union)</legend>
     <button id="all-stations" type="button" aria-pressed="true">All stations</button>
@@ -79,5 +71,6 @@
     <span id="copy-status" role="status"></span>
 </section>
 <noscript>Enable JavaScript to view observations.</noscript>
+</div>
 </div>
 {{end}}

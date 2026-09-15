@@ -11,8 +11,8 @@ import (
 	"github.com/miroslav-matejovsky/ais-testbench/display"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/httpserver"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/ui"
 	"github.com/miroslav-matejovsky/ais-testbench/simulator"
+	"github.com/miroslav-matejovsky/ais-testbench/ui"
 )
 
 // internalAddr is the private simulator API listener of combined mode. The OS
@@ -45,32 +45,27 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	if err != nil {
 		return fail(fmt.Errorf("create simulation: %w", err))
 	}
-	client, err := display.NewClient("http://" + internalLn.Addr().String())
+	client, err := display.NewClient("http://" + internalLn.Addr().String() + "/api/")
 	if err != nil {
 		return fail(fmt.Errorf("create display client: %w", err))
 	}
-	pages, err := ui.NewPages(logger, []ui.Link{{Href: "/manager", Label: "Manager"}, {Href: "/display", Label: "Display"}})
+	displayAPI, err := display.NewHandler(display.Config{Client: client, Logger: logger})
 	if err != nil {
-		return fail(fmt.Errorf("create pages: %w", err))
+		return fail(fmt.Errorf("create display API: %w", err))
 	}
-
-	simulatorAPI := sim.API()
+	public, err := publicHandler(logger, sim, displayAPI)
+	if err != nil {
+		return fail(err)
+	}
+	simulatorAPI := http.StripPrefix("/api", sim.API())
 	internal := http.NewServeMux()
 	internal.Handle("/api/", simulatorAPI)
-	public := http.NewServeMux()
-	public.Handle("/api/", simulatorAPI)
-	public.Handle("/display/api/", display.NewAPI(logger, client))
-	public.Handle("GET /static/", ui.Static())
-	public.HandleFunc("GET /{$}", pages.Home)
-	public.HandleFunc("GET /manager", pages.Manager)
-	public.HandleFunc("GET /display", pages.Display)
-	public.HandleFunc("GET /status", pages.Status)
 
 	// Both listeners are bound, so display requests can reach the internal API
 	// as soon as public serving starts.
 	internalServer := httpserver.Serve(logger, internalLn, internal)
 	publicServer := httpserver.Serve(logger, ln, public)
-	logger.Info("ais-testbench started", "url", "http://"+ln.Addr().String(), "internalAPI", client.Origin())
+	logger.Info("ais-testbench started", "url", "http://"+ln.Addr().String(), "internalAPI", "http://"+internalLn.Addr().String()+"/api/")
 	simulationCtx, stopSimulation := context.WithCancel(ctx)
 	simulationDone := make(chan struct{})
 	var simulationErr error // Read only after simulationDone closes.
@@ -101,6 +96,35 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	}
 	logger.Info("ais-testbench stopped")
 	return nil
+}
+
+// publicHandler composes the public routes at the root path: home, manager,
+// display, and status pages, assets, the simulator API, and the display API.
+func publicHandler(logger *slog.Logger, sim *simulator.Simulator, displayAPI http.Handler) (http.Handler, error) {
+	pages, err := ui.New(ui.Config{
+		ManagerAPIBase: "/api/", DisplayAPIBase: "/display/api/", AssetsBase: "/assets/",
+		HomeURL: "/", ManagerURL: "/manager", DisplayURL: "/display", StatusURL: "/status", Logger: logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create pages: %w", err)
+	}
+	managerPage, err := pages.ManagerPage()
+	if err != nil {
+		return nil, fmt.Errorf("create manager page: %w", err)
+	}
+	displayPage, err := pages.DisplayPage()
+	if err != nil {
+		return nil, fmt.Errorf("create display page: %w", err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.StripPrefix("/api", sim.API()))
+	mux.Handle("/display/api/", http.StripPrefix("/display/api", displayAPI))
+	mux.Handle("/assets/", http.StripPrefix("/assets", pages.Assets()))
+	mux.Handle("/{$}", pages.HomePage())
+	mux.Handle("/manager", managerPage)
+	mux.Handle("/display", displayPage)
+	mux.Handle("/status", pages.StatusPage())
+	return mux, nil
 }
 
 // wrap adds context to a non-nil error.

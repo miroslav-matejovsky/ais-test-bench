@@ -11,7 +11,7 @@ var files embed.FS
 var (
 	// HTMLFiles contains the html/template files.
 	HTMLFiles = sub(files, "html")
-	// StaticFiles contains files served as-is under /static/.
+	// StaticFiles contains stylesheets and scripts served as-is by ui.UI.Assets.
 	StaticFiles = sub(files, "static")
 )
 

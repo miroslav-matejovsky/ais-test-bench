@@ -29,13 +29,14 @@ components:
   simulator: { in: simulator } # owned runtime, serialized commands, local source, HTTP API and manager
   simulatorapi: { in: simulatorapi } # wire DTOs, source requests and error categories
   display: { in: display } # source interface, HTTP source, shared validation and AIS projection, display API
+  ui: { in: ui } # URL configuration, components, standalone pages, and embedded assets
 
   # Internal application support.
   app: { in: internal/app } # combined composition: public and private API listeners
   simdriver: { in: internal/simdriver } # pacing, serialized commands, clock seam and demo stations
   ais: { in: internal/ais } # AIS type 1 encode and decode, NMEA validation
-  ui: { in: internal/ui } # stateless HTML pages with component-specific navigation
-  ui-assets: { in: internal/ui/assets } # embedded templates, CSS, JavaScript, and htmx
+  ui-assets: { in: ui/internal/assets } # embedded templates, CSS, JavaScript, and htmx
+  urlpath: { in: internal/urlpath } # canonical public base path validation
   httpserver: { in: internal/httpserver } # shared HTTP server settings and bounded shutdown
   cli: { in: internal/cli } # shared listen address validation
   logtest: { in: internal/logtest } # test-only in-memory slog handler
@@ -58,8 +59,8 @@ deps:
   simdriver:
     mayDependOn: [simulation]
   display:
-    mayDependOn: [ais, simulatorapi, ui, httpserver]
+    mayDependOn: [ais, simulatorapi, ui, httpserver, urlpath]
   ui:
-    mayDependOn: [ui-assets]
+    mayDependOn: [ui-assets, urlpath]
   ais:
     canUse: [go-nmea]

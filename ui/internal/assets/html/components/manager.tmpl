@@ -1,12 +1,5 @@
-{{define "page:title"}}Manager{{end}}
-
-{{define "page:head"}}
-<script defer src="/static/js/manager.js"></script>
-<script defer src="/static/js/stations.js"></script>
-{{end}}
-
-{{define "page:content"}}
-<h1>Manager</h1>
+{{define "manager"}}
+<div id="{{.ID}}" class="ais-manager" data-ais-manager data-api-base="{{.APIBase}}">
 <p>Manage the active fleet and simulation speed. New vessels start at random positions off Rotterdam.</p>
 <p id="sim-clock" class="clock">Simulation time: connecting...</p>
 <form id="vessel-form" aria-describedby="count-help">
@@ -67,13 +60,12 @@
             <button id="station-rebase" type="button">Keep draft against this revision</button>
         </div>
     </details>
-    <p><a href="/api/stations">Station configuration JSON</a> | <a href="/api/observations">Received observations JSON</a></p>
+    <p><a href="{{.APIBase}}stations">Station configuration JSON</a> | <a href="{{.APIBase}}observations">Received observations JSON</a></p>
 </section>
 <h2>Latest AIS messages</h2>
 <p id="history-note">The last 10 retained reports are shown here.</p>
 <pre id="messages">Loading messages...</pre>
-<p><a href="/api/messages">View stored messages as JSON</a> | <a href="/api/metadata">View metadata as JSON</a></p>
-<button hx-get="/status" hx-target="#status">Check server status</button>
-<div id="status"></div>
+<p><a href="{{.APIBase}}messages">View stored messages as JSON</a> | <a href="{{.APIBase}}metadata">View metadata as JSON</a></p>
 <noscript>Enable JavaScript to manage vessels.</noscript>
+</div>
 {{end}}

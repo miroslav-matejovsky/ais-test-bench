@@ -2,12 +2,13 @@
 
 `simdriver` paces the public `simulation` engine and serializes commands for the
 public `simulator` runtime. It owns the internal clock seam, catch-up limits, and
-demonstration configuration. Public `simulator`, `simulatorapi`, and `display`
-packages own runtime APIs, wire contracts, and received-traffic projection.
+demonstration configuration. Public `simulator`, `simulatorapi`, `display`, and
+`ui` packages own runtime APIs, wire contracts, received-traffic projection, and
+embeddable rendering.
 
-Shared packages: `ais` encodes and decodes position reports, `ui` renders
-stateless HTML pages and serves static assets, `httpserver` runs HTTP servers
-with bounded shutdown, and `cli` validates listen addresses. `app` composes both
+Shared packages: `ais` encodes and decodes position reports, `httpserver` runs
+HTTP servers with bounded shutdown, `urlpath` validates public base paths, and
+`cli` validates listen addresses. `app` composes both
 components for the combined executable. `logtest` is a test-only in-memory slog
 handler for logger injection tests.
 

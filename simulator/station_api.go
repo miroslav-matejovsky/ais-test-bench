@@ -35,7 +35,9 @@ func (a *api) addStation(w http.ResponseWriter, r *http.Request) {
 		a.stationError(w, r, err)
 		return
 	}
-	w.Header().Set("Location", "/api/stations/"+id)
+	// A relative reference resolves against the request URL, so it keeps any
+	// public prefix a host or proxy stripped before this handler.
+	w.Header().Set("Location", "stations/"+url.PathEscape(id))
 	a.writeStatusJSON(w, r, http.StatusCreated, simulatorapi.StationCreated{StationSet: stationSetResponse(set), StationID: id})
 }
 

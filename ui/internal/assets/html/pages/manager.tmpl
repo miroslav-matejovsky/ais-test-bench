@@ -1,0 +1,10 @@
+{{define "page:title"}}Manager{{end}}
+
+{{define "page:content"}}
+<h1>Manager</h1>
+{{.Component}}
+{{- with .StatusURL}}
+<button hx-get="{{.}}" hx-target="#status">Check server status</button>
+<div id="status"></div>
+{{- end}}
+{{end}}

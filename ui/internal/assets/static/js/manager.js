@@ -1,4 +1,6 @@
 (() => {
+    // The component root supplies the public simulator API base, ending in "/".
+    const apiBase = document.querySelector("[data-ais-manager]").dataset.apiBase;
     const countForm = document.getElementById("vessel-form");
     const countInput = document.getElementById("vessel-count");
     const applyCount = document.getElementById("apply-count");
@@ -101,7 +103,7 @@
 
     countForm.addEventListener("submit", event => {
         event.preventDefault();
-        write("count", countStatus, "/api/vessels", { count: Number(countInput.value) }, fleet => {
+        write("count", countStatus, `${apiBase}vessels`, { count: Number(countInput.value) }, fleet => {
             countInput.value = fleet.vessels.length;
             showFleet(fleet);
             return `Vessel count set to ${fleet.vessels.length}.`;
@@ -109,7 +111,7 @@
     });
     speedForm.addEventListener("submit", event => {
         event.preventDefault();
-        write("speed", speedStatus, "/api/time", { speed: Number(speedInput.value) }, metadata => {
+        write("speed", speedStatus, `${apiBase}time`, { speed: Number(speedInput.value) }, metadata => {
             speedInput.value = metadata.time.speed;
             lastTime = metadata.time;
             showClock(metadata.time, false);
@@ -128,7 +130,7 @@
         const started = generation;
         try {
             const [fleet, history, metadata] = await Promise.all([
-                request("/api/vessels"), request("/api/messages"), request("/api/metadata"),
+                request(`${apiBase}vessels`), request(`${apiBase}messages`), request(`${apiBase}metadata`),
             ]);
             // A write started or finished during this poll; its result wins.
             if (started !== generation) return;

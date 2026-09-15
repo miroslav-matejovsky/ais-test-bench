@@ -46,8 +46,9 @@ unreachable simulator, retries, and replaces its map after a simulator restart.
 | `go run ./cmd/display` | `-addr localhost:8081`, `-simulator-url http://localhost:8000` | `/` (redirects to `/display`), `/display`, `/display/api/*` |
 
 Listen addresses need an explicit host. The simulator URL is an http or https
-origin without user info, path, query, or fragment. Each process serves
-`/static/*` for its pages.
+origin with an optional path prefix, without user info, query, or fragment. The
+display reads `{simulator-url}/api/` and links `{simulator-url}/manager`. Each
+process serves `/assets/*` for its pages.
 
 The display uses Leaflet 1.9.4 and OpenStreetMap tiles. The browser needs internet
 access to load Leaflet and map tiles; observation tables still work if either
@@ -213,17 +214,20 @@ pause, station edits, and observations: `go doc -all ./simulation`.
 
 Import `simulator` to own an engine and its serialized real-time driver. `New`
 accepts `Config{Simulation: engineConfig, Logger: logger}` and starts no server or
-background work. Mount `sim.API()` at `/api/` on your own mux and supervise
+background work. Mount `sim.API()` below your public API base, for example
+`mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))`, and supervise
 `sim.Run(ctx)` alongside your server. Drain HTTP requests before canceling and
 joining pacing. Run is single-use; after it ends, commands return
 `simulatorapi.ErrUnavailable` while committed snapshots remain readable.
 
 Import `display` to validate and decode received traffic. `display.New(sim)` reads
 that local runtime without a listener. `display.NewHTTPSource(display.HTTPConfig{
-Origin: origin, Client: httpClient})` supplies the same wire contract over HTTP;
+APIBase: "https://example.test/tools/ais/api/", Client: httpClient})` supplies the same wire contract over HTTP;
 pass it to `display.New(source)`. The client borrows the source, and the HTTP source
 borrows a supplied HTTP client. Clean up only owned connections after requests end.
-`display.NewClient(origin)` conveniently owns its own HTTP source.
+`display.NewClient(apiBase)` conveniently owns its own HTTP source.
+`display.NewHandler(display.Config{Client: client})` serves the display API at
+local routes; mount it with `http.StripPrefix` as well.
 
 Both sources pass through the same semantic validation and AIS decoding. HTTP
 sources also validate JSON framing and bound response bodies. Source errors wrap
@@ -242,8 +246,35 @@ changes simulation results.
 
 See the runnable [runtime example](simulator/example_test.go), and
 `go doc -all ./simulator`, `go doc -all ./display`, and `go doc -all ./simulatorapi` for the full
-contracts. Existing full-page handlers still use fixed routes and application
-layout; configurable prefixes and host-page components are later plan steps.
+contracts.
+
+## Embedding the UI
+
+Import `ui` to serve the manager and display inside your own HTTP server and pages.
+`ui.New(ui.Config{...})` takes explicit public URLs. `ManagerAPIBase`,
+`DisplayAPIBase`, and `AssetsBase` are absolute paths ending in `/`. Optional
+`HomeURL`, `ManagerURL`, `DisplayURL`, and `StatusURL` links are absolute paths or
+http(s) URLs. Public URLs include any reverse proxy prefix; nothing is inferred
+from request paths or forwarded headers. Dot segments, percent-encoded
+separators, queries or fragments in bases, and unsafe link schemes are rejected
+at construction.
+
+Every handler uses local routes. Mount each once and strip its public prefix:
+
+| Handler | Local routes | Mount example |
+| --- | --- | --- |
+| `sim.API()` | `/vessels`, `/time`, `/stations`, `/observations`, ... | `mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))` |
+| `display.NewHandler(...)` | `/observations`, `/stations/{id}/receptions` | `mux.Handle("/tools/ais/display/api/", http.StripPrefix("/tools/ais/display/api", h))` |
+| `u.Assets()` | `/css/app.css`, `/js/*.js` | `mux.Handle("/tools/ais/assets/", http.StripPrefix("/tools/ais/assets", u.Assets()))` |
+| `u.ManagerPage()`, `u.DisplayPage()`, `u.HomePage()`, `u.StatusPage()` | Any path; GET and HEAD | `mux.Handle("/tools/ais/manager", page)` |
+
+`u.RenderManager(w, ui.ComponentConfig{ID: "fleet"})` and `u.RenderDisplay` write
+only the component root for a host template, without a document shell. Load
+`u.ManagerResources()` or `u.DisplayResources()` once in that page. The component
+scripts still use document-wide element IDs, so render at most one manager and one
+display per page until host-page components are isolated. Wrap handlers in your
+authentication, authorization, and CSRF middleware; the library sets no CORS or
+authentication policy. See the runnable [UI example](ui/example_test.go).
 
 ## Simulator API
 

@@ -4,27 +4,40 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/miroslav-matejovsky/ais-testbench/internal/ui"
+	"github.com/miroslav-matejovsky/ais-testbench/ui"
 )
 
-// NewHandler returns the standalone simulator routes for sim, logging to sim's
-// logger:
+// NewStandaloneHandler returns the standalone simulator routes for sim, served
+// at the root path and logging to sim's logger:
 //
-//	GET /           redirect to /manager
+//	GET /           redirect to /manager, keeping the query
 //	GET /manager    manager page
 //	GET /status     server status, a fragment for htmx partial requests
-//	GET /static/    embedded static files
+//	GET /assets/    embedded assets
 //	    /api/       simulator API, see Simulator.API
-func NewHandler(sim *Simulator) (http.Handler, error) {
-	pages, err := ui.NewPages(sim.logger, []ui.Link{{Href: "/manager", Label: "Manager"}})
+func NewStandaloneHandler(sim *Simulator) (http.Handler, error) {
+	pages, err := ui.New(ui.Config{
+		ManagerAPIBase: "/api/", AssetsBase: "/assets/",
+		HomeURL: "/", ManagerURL: "/manager", StatusURL: "/status", Logger: sim.baseLogger,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create pages: %w", err)
 	}
+	manager, err := pages.ManagerPage()
+	if err != nil {
+		return nil, fmt.Errorf("create manager page: %w", err)
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/api/", sim.API())
-	mux.Handle("GET /static/", ui.Static())
-	mux.Handle("GET /{$}", http.RedirectHandler("/manager", http.StatusFound))
-	mux.HandleFunc("GET /manager", pages.Manager)
-	mux.HandleFunc("GET /status", pages.Status)
+	mux.Handle("/api/", http.StripPrefix("/api", sim.API()))
+	mux.Handle("/assets/", http.StripPrefix("/assets", pages.Assets()))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		target := "/manager"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+	})
+	mux.Handle("/manager", manager)
+	mux.Handle("/status", pages.StatusPage())
 	return mux, nil
 }

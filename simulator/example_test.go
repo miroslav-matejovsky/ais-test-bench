@@ -21,7 +21,7 @@ func Example() {
 		panic(err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/api/", sim.API())
+	mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))
 	// A host may serve mux with its own server and middleware. This local
 	// display client needs no HTTP listener and never reads the truth fleet.
 	client, err := display.New(sim)

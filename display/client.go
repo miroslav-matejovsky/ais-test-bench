@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miroslav-matejovsky/ais-testbench/internal/urlpath"
 	"github.com/miroslav-matejovsky/ais-testbench/simulatorapi"
 )
 
@@ -24,11 +25,15 @@ const (
 	maxErrorBytes = 64 << 10
 )
 
-// HTTPConfig selects the simulator origin and optional caller-owned HTTP client.
-// Origin accepts HTTP(S) scheme://host[:port], without a path other than "/".
+// HTTPConfig selects the simulator API and optional caller-owned HTTP client.
 type HTTPConfig struct {
-	Origin string
-	// Client is borrowed and is never mutated or closed. Nil creates an owned transport.
+	// APIBase is the simulator API base URL, http(s)://host[:port]/path/, for
+	// example "https://example.test/tools/ais/api/". Its path follows the
+	// canonical base path rule and ends with "/"; endpoint paths are appended
+	// below it. User info, query, and fragment are rejected.
+	APIBase string
+	// Client is borrowed and is never mutated or closed. Use it for custom
+	// transports, authentication headers, and TLS. Nil creates an owned transport.
 	Client *http.Client
 }
 
@@ -36,17 +41,18 @@ type HTTPConfig struct {
 // concurrent use, starts no background work, and implements Source. Consumers
 // own its lifetime and call CloseIdleConnections when they finish using it.
 type HTTPSource struct {
-	origin string
-	http   *http.Client
-	owned  bool
+	apiBase string
+	http    *http.Client
+	owned   bool
 }
 
-// NewHTTPSource validates the origin without connecting. Each read has a
+// NewHTTPSource validates the API base without connecting. Each read has a
 // five-second deadline, observes caller cancellation, and bounds its JSON body.
+// Browser credentials are never forwarded; only the HTTP client adds headers.
 func NewHTTPSource(config HTTPConfig) (*HTTPSource, error) {
-	origin, err := parseOrigin(config.Origin)
+	apiBase, err := parseAPIBase(config.APIBase)
 	if err != nil {
-		return nil, fmt.Errorf("invalid simulator URL %q: %w", config.Origin, err)
+		return nil, fmt.Errorf("invalid simulator API base %q: %w", config.APIBase, err)
 	}
 	client := config.Client
 	owned := client == nil
@@ -58,10 +64,12 @@ func NewHTTPSource(config HTTPConfig) (*HTTPSource, error) {
 		transport := defaultTransport.Clone()
 		client = &http.Client{Transport: transport}
 	}
-	return &HTTPSource{origin: origin, http: client, owned: owned}, nil
+	return &HTTPSource{apiBase: apiBase, http: client, owned: owned}, nil
 }
 
-func parseOrigin(raw string) (string, error) {
+// parseAPIBase validates an absolute http(s) API base URL and returns it with a
+// lowercase scheme.
+func parseAPIBase(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", err
@@ -75,8 +83,6 @@ func parseOrigin(raw string) (string, error) {
 		return "", errors.New("user info is not allowed")
 	case strings.ContainsAny(raw, "?#"):
 		return "", errors.New("query and fragment are not allowed")
-	case u.Path != "" && u.Path != "/":
-		return "", errors.New("path is not allowed")
 	case strings.HasSuffix(u.Host, ":"):
 		return "", errors.New("port is empty")
 	}
@@ -85,12 +91,10 @@ func parseOrigin(raw string) (string, error) {
 			return "", fmt.Errorf("port %q out of range 1-65535", port)
 		}
 	}
-	return u.Scheme + "://" + u.Host, nil
-}
-
-// Origin returns the simulator origin the client reads: scheme://host[:port].
-func (c *HTTPSource) Origin() string {
-	return c.origin
+	if err := urlpath.CheckBase(u.EscapedPath()); err != nil {
+		return "", err
+	}
+	return u.Scheme + "://" + u.Host + u.EscapedPath(), nil
 }
 
 // CloseIdleConnections closes idle simulator connections, for shutdown.
@@ -100,7 +104,7 @@ func (c *HTTPSource) CloseIdleConnections() {
 	}
 }
 
-// Observations reads GET /api/observations. It checks JSON framing, required
+// Observations reads GET {APIBase}observations. It checks JSON framing, required
 // clock field presence, and canonical decimal strings. Semantic validation and
 // NMEA decoding are performed by Client for every Source, including this one.
 func (c *HTTPSource) Observations(ctx context.Context, stations []string) (simulatorapi.Observations, error) {
@@ -116,7 +120,7 @@ func (c *HTTPSource) Observations(ctx context.Context, stations []string) (simul
 	}
 	query := url.Values{"stations": {selector}}
 	var upstream upstreamObservations
-	if err := c.get(ctx, "/api/observations", query, simulatorapi.ObservationResponseLimit, &upstream); err != nil {
+	if err := c.get(ctx, "observations", query, simulatorapi.ObservationResponseLimit, &upstream); err != nil {
 		return simulatorapi.Observations{}, err
 	}
 	clock := upstream.Time
@@ -130,7 +134,7 @@ func (c *HTTPSource) Observations(ctx context.Context, stations []string) (simul
 	return upstream.Observations, nil
 }
 
-// ReceptionHistory reads a bounded GET /api/stations/{id}/receptions wire page.
+// ReceptionHistory reads a bounded GET {APIBase}stations/{id}/receptions wire page.
 // It returns source error categories from simulatorapi, retaining original causes.
 func (c *HTTPSource) ReceptionHistory(ctx context.Context, stationID string, req simulatorapi.HistoryRequest) (simulatorapi.ReceptionPage, error) {
 	if err := sourceContext(ctx); err != nil {
@@ -149,7 +153,7 @@ func (c *HTTPSource) ReceptionHistory(ctx context.Context, stationID string, req
 	if req.Limit != 0 {
 		query.Set("limit", strconv.Itoa(req.Limit))
 	}
-	path := "/api/stations/" + url.PathEscape(stationID) + "/receptions"
+	path := "stations/" + url.PathEscape(stationID) + "/receptions"
 	var upstream simulatorapi.ReceptionPage
 	if err := c.get(ctx, path, query, simulatorapi.ReceptionResponseLimit, &upstream); err != nil {
 		return simulatorapi.ReceptionPage{}, err
@@ -160,13 +164,14 @@ func (c *HTTPSource) ReceptionHistory(ctx context.Context, stationID string, req
 	return upstream, nil
 }
 
-// get reads one JSON object from path within upstreamTimeout. It checks the
-// status and content type, bounds the body to limit bytes before decoding,
-// checks decimal uint64 strings, and decodes the object into value.
+// get reads one JSON object from path, relative to the API base, within
+// upstreamTimeout. It checks the status and content type, bounds the body to
+// limit bytes before decoding, checks decimal uint64 strings, and decodes the
+// object into value. Errors name the relative path, not the configured URL.
 func (c *HTTPSource) get(ctx context.Context, path string, query url.Values, limit int64, value any) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, upstreamTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.origin+path+"?"+query.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBase+path+"?"+query.Encode(), nil)
 	if err != nil {
 		return fmt.Errorf("create request GET %s: %w", path, err)
 	}

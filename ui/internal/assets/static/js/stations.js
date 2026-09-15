@@ -1,4 +1,6 @@
 (() => {
+    // The manager component root supplies the public simulator API base, ending in "/".
+    const apiBase = document.querySelector("[data-ais-manager]").dataset.apiBase;
     const byId = id => document.getElementById(id);
     const form = byId("station-form");
     const fields = byId("station-fields");
@@ -204,7 +206,7 @@
         updateControls();
         status.textContent = "Saving station change...";
         try {
-            const path = id ? `/api/stations/${encodeURIComponent(id)}` : "/api/stations";
+            const path = id ? `${apiBase}stations/${encodeURIComponent(id)}` : `${apiBase}stations`;
             const deleting = value === null;
             const query = new URLSearchParams({ simulationId: identity.simulationId, stationSetRevision: identity.revision });
             const result = await request(deleting ? `${path}?${query}` : path, {
@@ -222,7 +224,7 @@
             fieldErrors(error.fields);
             status.textContent = `Could not save: ${error.message}`;
             if (error.status === 409) {
-                try { accept(await request("/api/stations")); } catch (refreshError) { status.textContent += `; refresh failed: ${refreshError.message}`; }
+                try { accept(await request(`${apiBase}stations`)); } catch (refreshError) { status.textContent += `; refresh failed: ${refreshError.message}`; }
                 if (draft) showConflict();
                 status.textContent = "Configuration changed. Review current values before retrying.";
             }
@@ -261,7 +263,7 @@
     async function refresh() {
         const started = generation;
         try {
-            const result = await request("/api/stations");
+            const result = await request(`${apiBase}stations`);
             if (started === generation && !saving) accept(result);
         } catch (error) {
             if (started === generation && !saving) status.textContent = `Station updates unavailable (${error.message}). Showing last configuration; retrying...`;

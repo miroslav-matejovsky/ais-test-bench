@@ -120,7 +120,7 @@ func (t *countingTransport) CloseIdleConnections() { t.closes.Add(1) }
 func TestSourceConstructionAndBorrowedTransportOwnership(t *testing.T) {
 	transport := &countingTransport{}
 	httpClient := &http.Client{Transport: transport}
-	source, err := display.NewHTTPSource(display.HTTPConfig{Origin: "http://example.test", Client: httpClient})
+	source, err := display.NewHTTPSource(display.HTTPConfig{APIBase: "http://example.test/api/", Client: httpClient})
 	require.NoError(t, err)
 	client, err := display.New(source)
 	require.NoError(t, err)
@@ -142,7 +142,7 @@ func TestHTTPSourceCancellationDuringRead(t *testing.T) {
 		<-r.Context().Done()
 	}))
 	t.Cleanup(server.Close)
-	source, err := display.NewHTTPSource(display.HTTPConfig{Origin: server.URL})
+	source, err := display.NewHTTPSource(display.HTTPConfig{APIBase: server.URL + "/"})
 	require.NoError(t, err)
 	t.Cleanup(source.CloseIdleConnections)
 	ctx, cancel := context.WithCancel(t.Context())

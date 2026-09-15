@@ -13,14 +13,15 @@ import (
 )
 
 // Run starts a new simulation run and serves the standalone simulator (see
-// NewHandler) on ln until ctx is cancelled. A nil logger means slog.Default().
-// Run takes ownership of ln and closes it, also when construction fails.
+// NewStandaloneHandler) on ln until ctx is cancelled. A nil logger means
+// slog.Default(). Run takes ownership of ln and closes it, also when
+// construction fails.
 func Run(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
 	sim, err := New(Config{Simulation: simdriver.NewConfig(), Logger: logger})
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulation: %w", err), ln.Close())
 	}
-	handler, err := NewHandler(sim)
+	handler, err := NewStandaloneHandler(sim)
 	if err != nil {
 		return errors.Join(fmt.Errorf("create simulator handler: %w", err), ln.Close())
 	}

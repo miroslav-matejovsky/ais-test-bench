@@ -3,6 +3,7 @@ package display
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,27 +19,38 @@ type api struct {
 	client *Client
 }
 
-// NewAPI returns the display API backed by client:
-//
-//	GET /display/api/observations?stations=all          Observations
-//	GET /display/api/stations/{id}/receptions?simulationId=...&after=...&limit=...  ReceptionPage
-//
-// Mount it at /display/api/. Every request performs one simulator read;
-// nothing is cached. Invalid display queries return 400. A simulator 400, 404,
-// or 409 keeps its status and message. Retryable upstream failures return 503;
-// simulator responses that violate the API return 502 with context. Records go
-// to logger with component=display; nil means slog.Default().
-func NewAPI(logger *slog.Logger, client *Client) http.Handler {
-	return newAPI(componentLogger(logger), client)
+// Config configures the display API handler.
+type Config struct {
+	// Client is required and borrowed; the handler never closes it.
+	Client *Client
+	// Logger receives consumed 5xx failures with component=display. Nil means
+	// slog.Default().
+	Logger *slog.Logger
 }
 
-// newAPI is NewAPI with an already resolved component logger.
-func newAPI(logger *slog.Logger, client *Client) http.Handler {
-	a := &api{logger: logger, client: client}
+// NewHandler returns the display API backed by config.Client, with local routes:
+//
+//	GET /observations?stations=all                                    Observations
+//	GET /stations/{id}/receptions?simulationId=...&after=...&limit=... ReceptionPage
+//
+// Mount it below its public API base and strip that base once:
+//
+//	mux.Handle("/tools/ais/display/api/", http.StripPrefix("/tools/ais/display/api", h))
+//
+// Every request performs one source read; nothing is cached. Invalid display
+// queries return 400. A source 400, 404, or 409 keeps its status and message.
+// Retryable source failures return 503; source responses that violate the API
+// return 502 with context. The handler sets no CORS or authentication policy, so
+// host middleware can wrap it.
+func NewHandler(config Config) (http.Handler, error) {
+	if config.Client == nil {
+		return nil, errors.New("display client is required")
+	}
+	a := &api{logger: componentLogger(config.Logger), client: config.Client}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /display/api/observations", a.observations)
-	mux.HandleFunc("GET /display/api/stations/{id}/receptions", a.receptions)
-	return mux
+	mux.HandleFunc("GET /observations", a.observations)
+	mux.HandleFunc("GET /stations/{id}/receptions", a.receptions)
+	return mux, nil
 }
 
 func (a *api) observations(w http.ResponseWriter, r *http.Request) {

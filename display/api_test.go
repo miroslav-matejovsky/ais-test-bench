@@ -419,10 +419,12 @@ func (u *upstream) requested() []string {
 
 func newAPI(t *testing.T, u *upstream) http.Handler {
 	t.Helper()
-	client, err := display.NewClient(u.server.URL)
+	client, err := display.NewClient(u.server.URL + "/api/")
 	require.NoError(t, err)
 	t.Cleanup(client.CloseIdleConnections)
-	return display.NewAPI(slog.New(slog.DiscardHandler), client)
+	handler, err := display.NewHandler(display.Config{Client: client, Logger: slog.New(slog.DiscardHandler)})
+	require.NoError(t, err)
+	return http.StripPrefix("/display/api", handler)
 }
 
 func get(handler http.Handler, target string) *httptest.ResponseRecorder {

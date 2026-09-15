@@ -5,15 +5,24 @@
 // New borrows a Source and constructs a Client without reading or starting work.
 // The public simulator.Simulator satisfies Source; NewHTTPSource provides the
 // HTTP implementation. NewClient is a convenience constructor owning an HTTP
-// source for one simulator origin. Source signatures use public simulatorapi DTOs.
+// source for one simulator API base URL. Source signatures use public
+// simulatorapi DTOs.
+//
+// HTTPConfig.APIBase is the simulator API base URL including any path prefix,
+// for example https://example.test/tools/ais/api/. Its path is absolute, has no
+// empty, dot, or percent-encoded segment, and ends with "/"; relative endpoint
+// paths are appended below it. User info, query, and fragment are rejected. A
+// supplied HTTP client adds host authentication, transports, and TLS. Browser
+// credentials are never forwarded.
 //
 // Each Client request makes exactly one source read under a five-second deadline
 // derived from the caller context, then validates and decodes the whole snapshot.
 // Local and remote snapshots pass through the same semantic and AIS checks.
 // HTTPSource additionally validates JSON framing, required clock field presence,
 // canonical decimal strings, and content type. It bounds bodies to 8 MiB for
-// observations and 2 MiB for history before decoding. It never reads /api/vessels,
-// /api/messages, or /api/metadata. Clients hold no poller, cache, clock, or history.
+// observations and 2 MiB for history before decoding. It reads only
+// {APIBase}observations and {APIBase}stations/{id}/receptions, never the truth
+// fleet, history, or metadata. Clients hold no poller, cache, clock, or history.
 //
 // Callers own sources supplied to New and clients supplied in HTTPConfig. Neither
 // is closed or mutated by the library. CloseIdleConnections releases transports
@@ -67,8 +76,9 @@
 // wrapped causes. Unclassified source failures are HTTP 500. Errors return no
 // partial value. Transport failures preserve their underlying network errors.
 //
-// NewAPI serves GET /display/api/observations and
-// GET /display/api/stations/{id}/receptions. Malformed display queries return
+// NewHandler serves the local routes GET /observations and
+// GET /stations/{id}/receptions. Mount it below a public API base with
+// http.StripPrefix; it sets no CORS or authentication policy. Malformed display queries return
 // 400. A simulator 400, 404 for an unknown station, or 409 for a history
 // request from another run keeps its status and diagnostic, so the browser can
 // reset a selection or cursor. A connection failure, timeout, or cancellation
@@ -77,10 +87,15 @@
 // contract returns 502 and a server log entry. A failed request never returns
 // partial data, so the browser keeps its last complete view.
 //
+// NewStandaloneHandler serves the display at the root path: the API at
+// /display/api/, the page, assets at /assets/, and a root redirect to /display
+// that keeps the query. StandaloneConfig.ManagerURL is an explicit, optional
+// navigation link and is never inferred from the source.
+//
 // # Logging
 //
 // Client, HTTPSource, and New neither take nor emit logs; they return errors.
-// NewAPI, NewHandler, and Run accept a logger; nil means slog.Default(), resolved
+// Config and StandaloneConfig accept a logger; nil means slog.Default(), resolved
 // once per call without changing the process default. Each derives one logger
 // with component=display, preserving the caller's attributes, groups, and levels,
 // so independently constructed handlers never share records.

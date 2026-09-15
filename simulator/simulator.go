@@ -28,8 +28,9 @@ type Config struct {
 // Construction starts no goroutines or listeners. Run must be supervised by the
 // caller; it never owns the caller's HTTP server or context.
 type Simulator struct {
-	driver *simdriver.Driver
-	logger *slog.Logger
+	driver     *simdriver.Driver
+	logger     *slog.Logger // Component logger with component=simulator.
+	baseLogger *slog.Logger // Resolved caller logger, for other components' pages.
 }
 
 // New validates configuration and creates an engine on the system clock. Elapsed
@@ -46,12 +47,16 @@ func newSimulator(config Config, clock simdriver.Clock) (*Simulator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create simulation: %w", err)
 	}
-	return &Simulator{driver: simdriver.NewDriver(engine, clock), logger: logger.With("component", "simulator")}, nil
+	return &Simulator{driver: simdriver.NewDriver(engine, clock), logger: logger.With("component", "simulator"), baseLogger: logger}, nil
 }
 
-// API returns the /api/* handler over this simulator. Requests retain their
-// original paths; mount at /api/ without stripping that prefix. It owns no server.
-// The handler logs consumed failures to this simulator's logger.
+// API returns the simulator API handler with local routes such as GET /vessels
+// and POST /stations. Mount it below its public API base and strip that base once:
+//
+//	mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))
+//
+// It owns no server, sets no CORS or authentication policy, and can be wrapped by
+// host middleware. It logs consumed failures to this simulator's logger.
 func (s *Simulator) API() http.Handler { return newAPI(s.logger, s) }
 
 // Run paces the engine until cancellation or settlement failure. It may be called

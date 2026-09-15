@@ -76,7 +76,7 @@ func newScenario(t *testing.T) *scenario {
 	})
 	require.NoError(t, err)
 	logger := slog.New(slog.DiscardHandler)
-	api := newAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})})
+	api := http.StripPrefix("/api", newAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})}))
 	s := &scenario{engine: engine}
 	s.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Scenario-Truth") == "" {
@@ -87,10 +87,12 @@ func newScenario(t *testing.T) *scenario {
 		api.ServeHTTP(w, r)
 	}))
 	t.Cleanup(s.upstream.Close)
-	client, err := display.NewClient(s.upstream.URL)
+	client, err := display.NewClient(s.upstream.URL + "/api/")
 	require.NoError(t, err)
 	t.Cleanup(client.CloseIdleConnections)
-	s.display = display.NewAPI(logger, client)
+	handler, err := display.NewHandler(display.Config{Client: client, Logger: logger})
+	require.NoError(t, err)
+	s.display = http.StripPrefix("/display/api", handler)
 	return s
 }
 
@@ -306,9 +308,11 @@ func BenchmarkDisplayObservations(b *testing.B) {
 	logger := slog.New(slog.DiscardHandler)
 	upstream := httptest.NewServer(newAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})}))
 	b.Cleanup(upstream.Close)
-	client, err := display.NewClient(upstream.URL)
+	client, err := display.NewClient(upstream.URL + "/")
 	require.NoError(b, err)
-	handler := display.NewAPI(logger, client)
+	api, err := display.NewHandler(display.Config{Client: client, Logger: logger})
+	require.NoError(b, err)
+	handler := http.StripPrefix("/display/api", api)
 
 	var size int
 	for b.Loop() {
