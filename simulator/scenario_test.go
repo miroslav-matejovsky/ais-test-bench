@@ -286,8 +286,10 @@ func TestStationDifferencesReachDisplay(t *testing.T) {
 }
 
 // BenchmarkDisplayObservations measures one display request at maximum
-// occupancy through both HTTP hops: engine snapshot, simulator JSON encoding,
-// display bounded read, validation, NMEA decoding, and display JSON encoding.
+// occupancy through both HTTP hops of separate processes, the slowest path:
+// engine snapshot, simulator JSON encoding, display bounded read, validation,
+// NMEA decoding, and display JSON encoding. Combined mode reads the engine in
+// process and skips the simulator JSON hop.
 func BenchmarkDisplayObservations(b *testing.B) {
 	definitions := make([]simulation.StationDefinition, 0, simulation.MaxStations)
 	for range simulation.MaxStations {

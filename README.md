@@ -64,7 +64,10 @@ task all
 
 Development checks use the Go version in `go.mod`, Task, PowerShell,
 golangci-lint, deadcode, gotestsum, and go-arch-lint. `task go-tools` installs
-the Go tools. Dependencies are vendored.
+the Go tools. Dependencies are vendored. `task all` also runs `task consumer`,
+which compiles the public examples as an external module. The browser checks in
+[`ui/testdata`](ui/testdata/README.md) are run manually against a local app and
+host fixture.
 
 ## Architecture
 
@@ -119,7 +122,7 @@ every report takes about 2.1 ms with full histories and 1,000 observed targets,
 and 7.9 ms when all 100 MMSIs are replaced every second. Both stay below the
 10 ms that 100x allows. The largest observation snapshot, 16 stations and 1,000
 targets, encodes to 5.2 MiB, under the display's 8 MiB bound; one display request
-at that size takes about 180 ms. Rerun with
+at that size takes about 180 ms through the separate-process HTTP path. Rerun with
 `go test ./simulation ./simulator -run '^$' -bench . -benchmem`.
 
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet

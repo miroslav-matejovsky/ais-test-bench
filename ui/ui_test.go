@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/miroslav-matejovsky/ais-testbench/ui"
+	"github.com/miroslav-matejovsky/ais-testbench/ui/internal/assets"
 )
 
 // nestedConfig configures every URL below the /tools/ais public prefix.
@@ -340,6 +342,27 @@ func TestAssets(t *testing.T) {
 	}
 	// Unmounted paths that escape the asset root are rejected by the handler itself.
 	require.Equal(t, http.StatusNotFound, request(u.Assets(), http.MethodGet, "/css/../../ui.go", nil).Code)
+}
+
+// TestAssetsHaveNoApplicationPaths guards against templates and browser code
+// that hard-code application routes instead of the configured bases. Third-party
+// Leaflet and htmx files are skipped.
+func TestAssetsHaveNoApplicationPaths(t *testing.T) {
+	absolute := regexp.MustCompile("[=\"'`(]/(api|display|manager|status|assets|static)\\b")
+	for name, files := range map[string]fs.FS{"html": assets.HTMLFiles, "static": assets.StaticFiles} {
+		err := fs.WalkDir(files, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || strings.HasPrefix(path, "leaflet/") || strings.HasSuffix(path, ".min.js") {
+				return err
+			}
+			data, err := fs.ReadFile(files, path)
+			if err != nil {
+				return err
+			}
+			require.Empty(t, absolute.FindAllString(string(data), -1), "%s/%s", name, path)
+			return nil
+		})
+		require.NoError(t, err)
+	}
 }
 
 // TestBundledLeafletIsPinned guards the bundled Leaflet 1.9.4 files against

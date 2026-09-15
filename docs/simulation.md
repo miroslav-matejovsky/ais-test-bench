@@ -38,7 +38,7 @@ can import `simulation` directly.
   a vessel no station hears is not visible, and a missed report leaves the
   last known position stale.
 - **History and APIs.** The latest 1,000 reports and the newest receptions
-  per station are retained and queryable over HTTP (`internal/simulatorapi`)
+  per station are retained and queryable over HTTP (`simulatorapi`)
   or in-process (`simulation.History`, `simulation.ReceptionHistory`). See
   the root [`README.md`](../README.md) for the full API and Go package
   reference.

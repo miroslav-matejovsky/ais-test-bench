@@ -6,7 +6,8 @@ Let Go applications embed the manager and display in their existing HTTP server
 and page layout. Consumers supply their simulation configuration, logger, route
 prefixes, middleware, and lifecycle. The commands use these same public APIs.
 
-Status: steps 01-05 implemented and verified. Step 06 remains planned.
+Status: steps 01-06 implemented. Automated checks pass; manual UI verification is
+pending before these plans are removed.
 Breaking changes are allowed. See each step's status for results and the current API.
 
 ## Constraints at the start of the refactor
