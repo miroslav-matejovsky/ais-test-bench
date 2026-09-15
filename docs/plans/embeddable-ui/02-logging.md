@@ -5,6 +5,27 @@ effort: "M"
 complexity: "medium"
 ---
 
+## Status
+
+Implemented on 2026-09-15.
+
+- `simulation.Config.Logger` added. The engine emits no records; logger choice
+  never changes results.
+- `simulator.Config.Logger` takes precedence over `Simulation.Logger` and replaces
+  it for the owned engine; nil falls back to it, then `slog.Default()`. The
+  simulator derives `component=simulator` once in `New`. `NewAPI` is replaced by
+  `Simulator.API`; `NewHandler(sim)` and `Serve(ctx, ln, sim, handler)` use the
+  simulator's logger, so instances cannot share loggers by mistake.
+- `display.NewAPI`, `NewHandler`, and `Run` resolve nil to `slog.Default()` and
+  derive `component=display` once per call.
+- Handler error sites use contextual slog methods. Audit found no swallowed errors
+  or duplicate records; the `httpserver` bridge already preserves handler
+  attributes, groups, and levels, and net/http provides no request context there.
+- `internal/logtest` provides the capturing handler used by tests.
+
+Verification: `task all` passed (629 tests, vet, fmt, deadcode, arch-lint, lint).
+`go test -race` passed for `simulation`, `simulator`, `display`, and `internal/...`.
+
 ## Implementation
 
 - Add the README's logger contract to `simulation.Config` and new public runtime,

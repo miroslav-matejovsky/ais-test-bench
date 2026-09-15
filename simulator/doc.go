@@ -2,8 +2,8 @@
 // its HTTP API, local received-traffic source, and standalone manager runtime.
 //
 // New validates Config and creates one engine and its sole mutator, an internal
-// driver. It starts no goroutines, listeners, or signal handlers. Config.Logger
-// defaults to slog.Default at construction. The caller supervises Simulator.Run
+// driver. It starts no goroutines, listeners, or signal handlers. The caller
+// supervises Simulator.Run
 // alongside its HTTP server, drains requests, then cancels and joins Run. Run
 // paces measured real time from construction; it may be called once, returns nil
 // on cancellation, and reports catch-up or delivery failures. A backlog exceeding
@@ -24,7 +24,26 @@
 // can be modified independently of the engine. Display validates local and remote
 // source values through the same semantic and AIS projection.
 //
-// NewAPI builds the /api/* routes defined by package simulatorapi over one
+// # Logging
+//
+// Config.Logger takes precedence over Config.Simulation.Logger and replaces it
+// for the owned engine. Nil falls back to Simulation.Logger, then slog.Default(),
+// resolved once in New; construction never changes the process default. The
+// simulator derives one logger with component=simulator, preserving the caller's
+// attributes, groups, and handler levels, and uses it for its API, standalone
+// pages, and Serve. Independent simulators never share records.
+//
+// Normal operation is quiet: reads, ticks, and successful commands emit nothing.
+// API handlers log failures they consume and turn into 5xx responses, and failed
+// response writes, at Error with path, input, and error, through the request
+// context. Serve logs start and stop at Info and HTTP server errors at Error.
+// Run returns failures to its supervising caller instead of logging them. Records
+// are emitted after driver and engine locks are released, and logger choice never
+// affects simulation state or emitted bytes.
+//
+// # HTTP API
+//
+// Simulator.API builds the /api/* routes defined by package simulatorapi over one
 // simulation driver. It maps public engine values to wire types with explicit
 // conversions, adding the driver's real pacing interval to metadata, and passes
 // NMEA sentences through exactly as generated, including CRLF. Reads return
@@ -52,7 +71,7 @@
 // only the manager.
 //
 // Package-level Run creates the demonstration configuration on the system clock
-// and serves NewHandler. Serve runs Simulator.Run next to an HTTP server on a
+// with the given logger and serves NewHandler. Serve runs Simulator.Run next to an HTTP server on a
 // caller-supplied listener and owns that listener. On
 // cancellation or a serving or pacing failure, HTTP drains within
 // a five-second shutdown timeout, then the pacing loop is stopped and joined.

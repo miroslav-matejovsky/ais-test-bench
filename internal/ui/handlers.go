@@ -26,7 +26,8 @@ type Pages struct {
 }
 
 // NewPages parses the shared layout with nav as the header links of every page.
-// Uptime reported by Status is measured from the NewPages call.
+// Uptime reported by Status is measured from the NewPages call. Logger must be
+// non-nil; the owning component resolves defaults and its component field.
 func NewPages(logger *slog.Logger, nav []Link) (*Pages, error) {
 	links := slices.Clone(nav)
 	funcs := template.FuncMap{"nav": func() []Link { return links }}
@@ -81,7 +82,7 @@ func (p *Pages) Status(w http.ResponseWriter, r *http.Request) {
 
 func (p *Pages) render(w http.ResponseWriter, r *http.Request, data any, name string, pageFiles ...string) {
 	if err := p.html.render(w, http.StatusOK, data, name, pageFiles...); err != nil {
-		p.logger.Error("render", "path", r.URL.Path, "template", name, "error", err)
+		p.logger.ErrorContext(r.Context(), "render", "path", r.URL.Path, "template", name, "error", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }

@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -12,11 +13,13 @@ import (
 	"github.com/miroslav-matejovsky/ais-testbench/simulatorapi"
 )
 
-// Config configures an owned engine and its HTTP error logger. Simulation fields
-// are explicit; zero count, seed, and speed retain their engine meanings.
+// Config configures an owned engine and its logger. Simulation fields are
+// explicit; zero count, seed, and speed retain their engine meanings.
 type Config struct {
 	Simulation simulation.Config
-	// Logger defaults to slog.Default() at construction.
+	// Logger receives this simulator's records with component=simulator. A non-nil
+	// Logger also replaces Simulation.Logger for the owned engine. Nil falls back
+	// to Simulation.Logger, then to slog.Default(), resolved once in New.
 	Logger *slog.Logger
 }
 
@@ -36,20 +39,20 @@ func New(config Config) (*Simulator, error) {
 }
 
 func newSimulator(config Config, clock simdriver.Clock) (*Simulator, error) {
-	engine, err := simulation.New(config.Simulation)
+	logger := cmp.Or(config.Logger, config.Simulation.Logger, slog.Default())
+	engineConfig := config.Simulation
+	engineConfig.Logger = logger
+	engine, err := simulation.New(engineConfig)
 	if err != nil {
 		return nil, fmt.Errorf("create simulation: %w", err)
 	}
-	logger := config.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &Simulator{driver: simdriver.NewDriver(engine, clock), logger: logger}, nil
+	return &Simulator{driver: simdriver.NewDriver(engine, clock), logger: logger.With("component", "simulator")}, nil
 }
 
 // API returns the /api/* handler over this simulator. Requests retain their
 // original paths; mount at /api/ without stripping that prefix. It owns no server.
-func (s *Simulator) API() http.Handler { return NewAPI(s.logger, s) }
+// The handler logs consumed failures to this simulator's logger.
+func (s *Simulator) API() http.Handler { return newAPI(s.logger, s) }
 
 // Run paces the engine until cancellation or settlement failure. It may be called
 // once, returns nil on cancellation, and returns operational errors to its caller.

@@ -38,6 +38,7 @@ components:
   ui-assets: { in: internal/ui/assets } # embedded templates, CSS, JavaScript, and htmx
   httpserver: { in: internal/httpserver } # shared HTTP server settings and bounded shutdown
   cli: { in: internal/cli } # shared listen address validation
+  logtest: { in: internal/logtest } # test-only in-memory slog handler
 
 deps:
   cmd-ais-testbench:

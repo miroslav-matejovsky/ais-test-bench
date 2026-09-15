@@ -76,7 +76,7 @@ func newScenario(t *testing.T) *scenario {
 	})
 	require.NoError(t, err)
 	logger := slog.New(slog.DiscardHandler)
-	api := NewAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})})
+	api := newAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})})
 	s := &scenario{engine: engine}
 	s.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Scenario-Truth") == "" {
@@ -304,7 +304,7 @@ func BenchmarkDisplayObservations(b *testing.B) {
 		require.NoError(b, err)
 	}
 	logger := slog.New(slog.DiscardHandler)
-	upstream := httptest.NewServer(NewAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})}))
+	upstream := httptest.NewServer(newAPI(logger, &Simulator{driver: simdriver.NewDriver(engine, fixedClock{})}))
 	b.Cleanup(upstream.Close)
 	client, err := display.NewClient(upstream.URL)
 	require.NoError(b, err)

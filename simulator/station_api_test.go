@@ -265,7 +265,7 @@ func TestStationRuntimeDefaultsReceiveInitialReports(t *testing.T) {
 	config.Speed = 0
 	sim, err := simulation.New(config)
 	require.NoError(t, err)
-	handler := NewAPI(slog.New(slog.DiscardHandler), &Simulator{driver: simdriver.NewDriver(sim, &testClock{now: start})})
+	handler := newAPI(slog.New(slog.DiscardHandler), &Simulator{driver: simdriver.NewDriver(sim, &testClock{now: start})})
 	o := decode[simulatorapi.Observations](t, serve(handler, "GET", "/api/observations", ""))
 	require.Len(t, o.Stations, 3)
 	require.Equal(t, uint64(1), o.Transmissions)

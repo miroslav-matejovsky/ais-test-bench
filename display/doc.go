@@ -77,6 +77,20 @@
 // contract returns 502 and a server log entry. A failed request never returns
 // partial data, so the browser keeps its last complete view.
 //
+// # Logging
+//
+// Client, HTTPSource, and New neither take nor emit logs; they return errors.
+// NewAPI, NewHandler, and Run accept a logger; nil means slog.Default(), resolved
+// once per call without changing the process default. Each derives one logger
+// with component=display, preserving the caller's attributes, groups, and levels,
+// so independently constructed handlers never share records.
+//
+// Normal operation is quiet: successful reads and 4xx responses emit nothing, and
+// neither does a request whose client went away. A consumed 5xx source failure
+// logs one Warn record with the operation, path, status, and error; a failed
+// response write logs at Error. Both use the request context. Run logs start and
+// stop at Info and HTTP server errors at Error.
+//
 // # Examples
 //
 // A standalone display reading a simulator with one station and one received

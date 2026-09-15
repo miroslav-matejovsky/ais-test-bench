@@ -8,4 +8,9 @@
 // ends, force-closes what remains, waits for the serving goroutine, and returns
 // every actionable error. Runtimes create one context with ShutdownTimeout and
 // shut their servers down in dependency order.
+//
+// Serve bridges http.Server's error log to the supplied logger's handler at
+// Error level, so the caller's attributes, groups, and level filtering apply.
+// net/http supplies no request context for these records. The logger must be
+// non-nil; public callers resolve defaults and component fields first.
 package httpserver

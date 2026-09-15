@@ -18,7 +18,10 @@ import (
 //	GET /display       display page
 //	GET /static/       embedded static files
 //	    /display/api/  display API, see NewAPI
+//
+// Records go to logger with component=display; nil means slog.Default().
 func NewHandler(logger *slog.Logger, client *Client) (http.Handler, error) {
+	logger = componentLogger(logger)
 	links := []ui.Link{{Href: "/display", Label: "Display"}}
 	if origin := client.Origin(); origin != "" {
 		links = append(links, ui.Link{Href: origin + "/manager", Label: "Simulator manager"})
@@ -28,7 +31,7 @@ func NewHandler(logger *slog.Logger, client *Client) (http.Handler, error) {
 		return nil, fmt.Errorf("create pages: %w", err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/display/api/", NewAPI(logger, client))
+	mux.Handle("/display/api/", newAPI(logger, client))
 	mux.Handle("GET /static/", ui.Static())
 	mux.Handle("GET /{$}", http.RedirectHandler("/display", http.StatusFound))
 	mux.HandleFunc("GET /display", pages.Display)
@@ -41,11 +44,13 @@ func NewHandler(logger *slog.Logger, client *Client) (http.Handler, error) {
 // in-flight requests, which cancels their simulator reads when it expires, and
 // then closes idle simulator connections. An unreachable simulator does not
 // stop Run; each request reports it. Run returns nil after a clean shutdown.
+// Records go to logger with component=display; nil means slog.Default().
 func Run(ctx context.Context, logger *slog.Logger, ln net.Listener, client *Client) error {
 	handler, err := NewHandler(logger, client)
 	if err != nil {
 		return errors.Join(fmt.Errorf("create display handler: %w", err), ln.Close())
 	}
+	logger = componentLogger(logger)
 	defer client.CloseIdleConnections()
 
 	server := httpserver.Serve(logger, ln, handler)

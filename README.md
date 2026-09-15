@@ -227,8 +227,18 @@ borrows a supplied HTTP client. Clean up only owned connections after requests e
 
 Both sources pass through the same semantic validation and AIS decoding. HTTP
 sources also validate JSON framing and bound response bodies. Source errors wrap
-public `simulatorapi` categories and their original causes. Logger configuration
-for the standalone `simulation` engine is planned in the next refactoring step.
+public `simulatorapi` categories and their original causes.
+
+Logging: library packages never create a process logger or call `slog.SetDefault`;
+the commands create the stderr logger. `simulation.Config.Logger`,
+`simulator.Config.Logger`, and the `display` handler constructors accept a
+`*slog.Logger`; nil means `slog.Default()` at construction. A non-nil
+`simulator.Config.Logger` replaces the nested engine logger. Components add
+`component=simulator` or `component=display` and keep caller attributes, groups,
+and levels. Normal operation is quiet: only consumed 5xx failures, failed response
+writes, HTTP server errors, and standalone start/stop are logged. `Run` returns its
+failures to the caller. The engine emits no records, and logger choice never
+changes simulation results.
 
 See the runnable [runtime example](simulator/example_test.go), and
 `go doc -all ./simulator`, `go doc -all ./display`, and `go doc -all ./simulatorapi` for the full

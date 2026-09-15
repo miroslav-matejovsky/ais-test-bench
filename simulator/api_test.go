@@ -63,7 +63,7 @@ func newFixture(t *testing.T) fixture {
 	require.NoError(t, err)
 	clock := &testClock{now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)}
 	driver := simdriver.NewDriver(sim, clock)
-	handler, err := NewHandler(slog.New(slog.DiscardHandler), &Simulator{driver: driver})
+	handler, err := NewHandler(&Simulator{driver: driver, logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
 	return fixture{sim: sim, clock: clock, driver: driver, handler: handler}
 }

@@ -21,7 +21,7 @@ type api struct {
 	sim    *Simulator
 }
 
-// NewAPI returns the simulator HTTP API for the engine paced by sim:
+// newAPI returns the simulator HTTP API for the engine paced by sim:
 //
 //	GET /api/vessels   simulatorapi.Fleet
 //	PUT /api/vessels   simulatorapi.CountRequest in, simulatorapi.Fleet out
@@ -30,8 +30,8 @@ type api struct {
 //	PUT /api/time      simulatorapi.TimeRequest in, simulatorapi.Metadata out
 //
 // Mount it at /api/. The handler is stateless apart from sim, so mounting it on
-// several listeners serves one engine consistently.
-func NewAPI(logger *slog.Logger, sim *Simulator) http.Handler {
+// several listeners serves one engine consistently. Logger must be non-nil.
+func newAPI(logger *slog.Logger, sim *Simulator) http.Handler {
 	a := &api{logger: logger, sim: sim}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/vessels", a.fleet)
@@ -76,7 +76,7 @@ func (a *api) setCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.sim.SetCount(r.Context(), *input.Count); err != nil {
-		a.logger.Error("set vessel count", "count", *input.Count, "error", err)
+		a.logger.ErrorContext(r.Context(), "set vessel count", "path", r.URL.Path, "count", *input.Count, "error", err)
 		http.Error(w, "could not update vessel count", simulatorapi.ErrorStatus(err))
 		return
 	}
@@ -99,7 +99,7 @@ func (a *api) setTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.sim.SetSpeed(r.Context(), *input.Speed); err != nil {
-		a.logger.Error("set simulation speed", "speed", *input.Speed, "error", err)
+		a.logger.ErrorContext(r.Context(), "set simulation speed", "path", r.URL.Path, "speed", *input.Speed, "error", err)
 		http.Error(w, "could not update simulation speed", simulatorapi.ErrorStatus(err))
 		return
 	}
@@ -138,6 +138,6 @@ func (a *api) writeStatusJSON(w http.ResponseWriter, r *http.Request, status int
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		a.logger.Error("write JSON response", "path", r.URL.Path, "error", err)
+		a.logger.ErrorContext(r.Context(), "write JSON response", "path", r.URL.Path, "error", err)
 	}
 }

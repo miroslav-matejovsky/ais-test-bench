@@ -1,6 +1,7 @@
 package display
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -25,8 +26,14 @@ type api struct {
 // Mount it at /display/api/. Every request performs one simulator read;
 // nothing is cached. Invalid display queries return 400. A simulator 400, 404,
 // or 409 keeps its status and message. Retryable upstream failures return 503;
-// simulator responses that violate the API return 502 with context.
+// simulator responses that violate the API return 502 with context. Records go
+// to logger with component=display; nil means slog.Default().
 func NewAPI(logger *slog.Logger, client *Client) http.Handler {
+	return newAPI(componentLogger(logger), client)
+}
+
+// newAPI is NewAPI with an already resolved component logger.
+func newAPI(logger *slog.Logger, client *Client) http.Handler {
 	a := &api{logger: logger, client: client}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /display/api/observations", a.observations)
@@ -119,7 +126,7 @@ func (a *api) writeError(w http.ResponseWriter, r *http.Request, operation strin
 	}
 	// A browser that went away and user-visible request errors need no log entry.
 	if status >= http.StatusInternalServerError && r.Context().Err() == nil {
-		a.logger.Warn(operation, "path", r.URL.Path, "status", status, "error", err)
+		a.logger.WarnContext(r.Context(), operation, "path", r.URL.Path, "status", status, "error", err)
 	}
 	http.Error(w, message, status)
 }
@@ -128,6 +135,12 @@ func (a *api) writeJSON(w http.ResponseWriter, r *http.Request, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		a.logger.Error("write JSON response", "path", r.URL.Path, "error", err)
+		a.logger.ErrorContext(r.Context(), "write JSON response", "path", r.URL.Path, "error", err)
 	}
+}
+
+// componentLogger resolves a nil logger to slog.Default() and derives the
+// display component logger. Public constructors call it once.
+func componentLogger(logger *slog.Logger) *slog.Logger {
+	return cmp.Or(logger, slog.Default()).With("component", "display")
 }

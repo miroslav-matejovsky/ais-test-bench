@@ -1,6 +1,9 @@
 package simulation
 
-import "time"
+import (
+	"log/slog"
+	"time"
+)
 
 // Config is the complete, explicit configuration of one run. Zero Seed,
 // InitialVesselCount, and Speed are valid values, not requests for defaults.
@@ -22,6 +25,11 @@ type Config struct {
 	// Stations are the initial receiving stations, 0 through MaxStations. Nil
 	// and empty mean zero receivers. New assigns IDs in slice order.
 	Stations []StationDefinition
+	// Logger is the application logger for this run. Nil means slog.Default(),
+	// resolved by the owner at its construction. The engine emits no records and
+	// returns every failure to its caller; owners such as simulator.New use this
+	// logger when their own is nil. It never affects state, randomness, or bytes.
+	Logger *slog.Logger
 }
 
 // TransmitterProfile is the reference AIS transmitter assumed for all vessels.

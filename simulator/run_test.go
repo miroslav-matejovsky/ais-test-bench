@@ -66,7 +66,7 @@ func TestServeFailureClosesListenerAndStopsEngine(t *testing.T) {
 	ln := failingListener{closed: make(chan struct{})}
 
 	// Serve returns only after the pacing loop has exited.
-	err := Serve(t.Context(), slog.New(slog.DiscardHandler), ln, &Simulator{driver: f.driver}, f.handler)
+	err := Serve(t.Context(), ln, &Simulator{driver: f.driver, logger: slog.New(slog.DiscardHandler)}, f.handler)
 
 	require.ErrorContains(t, err, "accept failed")
 	select {

@@ -191,7 +191,7 @@ func (a *api) stationError(w http.ResponseWriter, r *http.Request, err error) {
 		set := a.sim.Stations()
 		problem.SimulationID, problem.StationSetRevision = set.SimulationID, &set.Revision
 	default:
-		a.logger.Error("station API request", "path", r.URL.Path, "error", err)
+		a.logger.ErrorContext(r.Context(), "station API request", "path", r.URL.Path, "error", err)
 		problem.Error = "could not apply station request"
 	}
 	a.writeStatusJSON(w, r, status, problem)
