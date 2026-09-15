@@ -13,7 +13,7 @@ import (
 	"syscall"
 
 	"github.com/miroslav-matejovsky/ais-testbench/internal/cli"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/simulator"
+	"github.com/miroslav-matejovsky/ais-testbench/simulator"
 )
 
 const defaultAddr = "localhost:8000"

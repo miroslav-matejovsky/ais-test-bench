@@ -25,14 +25,14 @@ components:
   cmd-display: { in: cmd/display } # standalone display process
 
   # Public API.
-  simulation: { in: simulation } # engine: fleet, movement, AIS encoding, virtual clock, bounded history, stations, reception, observations
+  simulation: { in: simulation } # deterministic engine: fleet, AIS, virtual clock, stations and reception
+  simulator: { in: simulator } # owned runtime, serialized commands, local source, HTTP API and manager
+  simulatorapi: { in: simulatorapi } # wire DTOs, source requests and error categories
+  display: { in: display } # source interface, HTTP source, shared validation and AIS projection, display API
 
-  # Running application.
-  app: { in: internal/app } # combined composition: one engine, public and private API listeners, display
-  simulator: { in: internal/simulator } # simulator HTTP API, manager routes, engine and HTTP lifecycle
-  simdriver: { in: internal/simdriver } # real-time driver: pacing, serialized count, speed, and station commands, demo stations
-  simulatorapi: { in: internal/simulatorapi } # JSON wire types and simulator API contract
-  display: { in: internal/display } # simulator HTTP client, NMEA projection, display API, lifecycle
+  # Internal application support.
+  app: { in: internal/app } # combined composition: public and private API listeners
+  simdriver: { in: internal/simdriver } # pacing, serialized commands, clock seam and demo stations
   ais: { in: internal/ais } # AIS type 1 encode and decode, NMEA validation
   ui: { in: internal/ui } # stateless HTML pages with component-specific navigation
   ui-assets: { in: internal/ui/assets } # embedded templates, CSS, JavaScript, and htmx
@@ -51,7 +51,7 @@ deps:
     mayDependOn: [ais]
 
   app:
-    mayDependOn: [simulation, simdriver, simulator, display, ui, httpserver]
+    mayDependOn: [simdriver, simulator, display, ui, httpserver]
   simulator:
     mayDependOn: [simulation, simdriver, simulatorapi, ui, httpserver]
   simdriver:

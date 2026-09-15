@@ -255,9 +255,10 @@ func TestCancellationStopsBetweenChunks(t *testing.T) {
 	sim, clock, driver := newDriver(t)
 	clock.Add(3 * time.Second)
 
-	// The engine checks the context before and after each 600ms chunk at 1x,
+	// The driver first checks cancellation; the engine then checks before and
+	// after each 600ms chunk at 1x,
 	// which holds at most one tick.
-	err := driver.SetCount(&cancelAfter{Context: t.Context(), checks: 4}, 2)
+	err := driver.SetCount(&cancelAfter{Context: t.Context(), checks: 5}, 2)
 
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, virtualStart.Add(1200*time.Millisecond), sim.Metadata().Time.Now, "complete chunks stay delivered")

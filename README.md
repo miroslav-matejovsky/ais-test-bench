@@ -115,7 +115,7 @@ and 7.9 ms when all 100 MMSIs are replaced every second. Both stay below the
 10 ms that 100x allows. The largest observation snapshot, 16 stations and 1,000
 targets, encodes to 5.2 MiB, under the display's 8 MiB bound; one display request
 at that size takes about 180 ms. Rerun with
-`go test ./simulation ./internal/app -run '^$' -bench . -benchmem`.
+`go test ./simulation ./simulator -run '^$' -bench . -benchmem`.
 
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
 removes active vessels while preserving retained reports. Setting the count to
@@ -209,6 +209,32 @@ for _, report := range reports {
 The runnable examples cover initial creation, batches, stepping, speed scaling,
 pause, station edits, and observations: `go doc -all ./simulation`.
 
+## Public runtime and display sources
+
+Import `simulator` to own an engine and its serialized real-time driver. `New`
+accepts `Config{Simulation: engineConfig, Logger: logger}` and starts no server or
+background work. Mount `sim.API()` at `/api/` on your own mux and supervise
+`sim.Run(ctx)` alongside your server. Drain HTTP requests before canceling and
+joining pacing. Run is single-use; after it ends, commands return
+`simulatorapi.ErrUnavailable` while committed snapshots remain readable.
+
+Import `display` to validate and decode received traffic. `display.New(sim)` reads
+that local runtime without a listener. `display.NewHTTPSource(display.HTTPConfig{
+Origin: origin, Client: httpClient})` supplies the same wire contract over HTTP;
+pass it to `display.New(source)`. The client borrows the source, and the HTTP source
+borrows a supplied HTTP client. Clean up only owned connections after requests end.
+`display.NewClient(origin)` conveniently owns its own HTTP source.
+
+Both sources pass through the same semantic validation and AIS decoding. HTTP
+sources also validate JSON framing and bound response bodies. Source errors wrap
+public `simulatorapi` categories and their original causes. Logger configuration
+for the standalone `simulation` engine is planned in the next refactoring step.
+
+See the runnable [runtime example](simulator/example_test.go), and
+`go doc -all ./simulator`, `go doc -all ./display`, and `go doc -all ./simulatorapi` for the full
+contracts. Existing full-page handlers still use fixed routes and application
+layout; configurable prefixes and host-page components are later plan steps.
+
 ## Simulator API
 
 Any HTTP client can poll the simulator. JSON responses use `Cache-Control: no-store`.
@@ -246,7 +272,7 @@ A fleet vessel is `{ "mmsi": ..., "name": "...", "typeId": "cargo", "report": {
 data is only in the NMEA sentence. A history message is `{ "sequence": 1,
 "mmsi": ..., "timestamp": "...", "sentence": "..." }`; bounds are `null` for an
 empty history. Sequences restart with every new `simulationId`. See
-`internal/simulatorapi` for the full contract and polling guidance.
+`simulatorapi` for the full contract and polling guidance.
 
 `PUT` requires `Content-Type: application/json` and either an integer count from
 0 to 100 or a speed of 0 (pause) or 0.01 to 100 in 0.01 steps. Malformed input
@@ -272,7 +298,7 @@ Observation targets contain only received NMEA navigation, with per-station last
 receipt provenance. Scenario names/categories remain separately identified. Coverage
 is estimated GeoJSON MultiPolygon for the published reference transmitter, with
 90% and 50% contours per channel, split at the antimeridian. Signal power/margin
-are model estimates. See `internal/simulatorapi` package documentation for complete
+are model estimates. See `simulatorapi` package documentation for complete
 request examples, field units, selection, retention, and lifecycle rules.
 
 ## Display API
@@ -323,7 +349,7 @@ run 409. An unreachable simulator or a timeout returns 503; any invalid simulato
 response returns 502. The page then keeps its last complete view, marks the entire
 view stale, shows that updates are unavailable, and retries. A new `simulationId`
 clears markers, selections, details, and history cursors before drawing the new run.
-See `internal/display` package
+See `display` package
 documentation for the full validation rules.
 
 Movement follows the current speed and course over the earth's surface. Random

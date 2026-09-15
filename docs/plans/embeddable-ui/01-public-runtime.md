@@ -5,6 +5,38 @@ effort: "L"
 complexity: "high"
 ---
 
+## Status
+
+Implemented and verified on 2026-09-15.
+
+- Public `simulator`, `simulatorapi`, and `display` packages replace their internal
+  counterparts. Driver mechanics and the deterministic clock seam remain internal.
+- `simulator.New(Config)` owns an engine and exposes commands, snapshots, `API()`,
+  and single-use `Run(ctx)`. Terminal runtimes reject writes; snapshots remain readable.
+- `display.New(source)` borrows a two-method `Source`. `Simulator` implements it
+  locally; `display.NewHTTPSource(HTTPConfig)` implements it remotely.
+  `display.NewClient(origin)` is the convenience constructor owning an HTTP source.
+- Both paths share semantic validation and AIS decoding. HTTP additionally checks
+  framing, required field presence, canonical decimal strings, and body limits.
+- Existing combined-mode HTTP composition remains until step 05. Fixed UI/API
+  routes remain until step 03. The integration scenario and display benchmark now
+  live in `simulator/scenario_test.go` alongside their private deterministic seam.
+- A regression fix rejects canceled count/speed commands even while paused or
+  when no real time has elapsed. Cancellation between catch-up chunks still keeps
+  delivered chunks and leaves the requested command unapplied.
+
+Verification:
+
+- `task all`: passed, including 617 tests, format, vet, deadcode, architecture, and lint.
+- `go test -race ./simulator ./display ./internal/simdriver ./internal/app`: passed.
+- `simulator/example_test.go` compiles and runs as an external test package using
+  only public library imports. Local/remote parity, malformed local responses,
+  source errors, cancellation, ownership, duplicate Run, and terminal writes have
+  regression coverage.
+
+Go and lint caches used task-specific directories under the system temporary
+directory because the sandbox cannot write the default user cache locations.
+
 ## Implementation
 
 - Extract public `simulator`, `simulatorapi`, and `display` from the current internal

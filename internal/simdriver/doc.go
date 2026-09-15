@@ -49,6 +49,10 @@
 // without settling, so metadata can trail pacing by one heartbeat plus
 // processing time.
 //
+// Run marks the driver stopped before returning. Later commands return ErrStopped
+// without changing the engine; snapshots remain readable. Count and speed writes
+// check cancellation even with no elapsed time or while paused.
+//
 // Clock is the real-time seam and SystemClock the production clock. Real
 // instants keep their monotonic reading until elapsed time is computed; UTC
 // normalization applies only to virtual timestamps.

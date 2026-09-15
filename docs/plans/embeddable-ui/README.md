@@ -6,10 +6,10 @@ Let Go applications embed the manager and display in their existing HTTP server
 and page layout. Consumers supply their simulation configuration, logger, route
 prefixes, middleware, and lifecycle. The commands use these same public APIs.
 
-Status: proposed implementation. This change writes the plan only. No code changes
-or `task all` execution are part of planning. Breaking changes are allowed.
+Status: step 01 implemented and verified. Steps 02-06 remain planned. Breaking
+changes are allowed. See step 01 for verification results and the current API.
 
-## Current constraints
+## Constraints at the start of the refactor
 
 - `simulation` is the only public library package. Its `Config` has no logger.
 - `internal/simulator` combines API handlers, the manager, and server lifecycle.

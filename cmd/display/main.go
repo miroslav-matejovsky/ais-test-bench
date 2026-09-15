@@ -12,8 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/miroslav-matejovsky/ais-testbench/display"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/cli"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/display"
 )
 
 const (

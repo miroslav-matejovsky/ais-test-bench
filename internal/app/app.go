@@ -8,12 +8,11 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/miroslav-matejovsky/ais-testbench/internal/display"
+	"github.com/miroslav-matejovsky/ais-testbench/display"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/httpserver"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/simulator"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/ui"
-	"github.com/miroslav-matejovsky/ais-testbench/simulation"
+	"github.com/miroslav-matejovsky/ais-testbench/simulator"
 )
 
 // internalAddr is the private simulator API listener of combined mode. The OS
@@ -42,11 +41,10 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 	fail := func(err error) error {
 		return errors.Join(err, ln.Close(), internalLn.Close())
 	}
-	engine, err := simulation.New(simdriver.NewConfig())
+	sim, err := simulator.New(simulator.Config{Simulation: simdriver.NewConfig(), Logger: logger})
 	if err != nil {
 		return fail(fmt.Errorf("create simulation: %w", err))
 	}
-	sim := simdriver.NewDriver(engine, simdriver.SystemClock{})
 	client, err := display.NewClient("http://" + internalLn.Addr().String())
 	if err != nil {
 		return fail(fmt.Errorf("create display client: %w", err))
@@ -56,7 +54,7 @@ func serve(ctx context.Context, logger *slog.Logger, ln, internalLn net.Listener
 		return fail(fmt.Errorf("create pages: %w", err))
 	}
 
-	simulatorAPI := simulator.NewAPI(logger, sim)
+	simulatorAPI := sim.API()
 	internal := http.NewServeMux()
 	internal.Handle("/api/", simulatorAPI)
 	public := http.NewServeMux()

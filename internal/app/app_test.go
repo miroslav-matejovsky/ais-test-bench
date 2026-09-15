@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/miroslav-matejovsky/ais-testbench/display"
 	"github.com/miroslav-matejovsky/ais-testbench/internal/app"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/display"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/simulatorapi"
+	"github.com/miroslav-matejovsky/ais-testbench/simulatorapi"
 )
 
 func do(t *testing.T, method, url, body string) []byte {
