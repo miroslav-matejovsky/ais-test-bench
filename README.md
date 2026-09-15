@@ -50,9 +50,9 @@ origin with an optional path prefix, without user info, query, or fragment. The
 display reads `{simulator-url}/api/` and links `{simulator-url}/manager`. Each
 process serves `/assets/*` for its pages.
 
-The display uses Leaflet 1.9.4 and OpenStreetMap tiles. The browser needs internet
-access to load Leaflet and map tiles; observation tables still work if either
-cannot load. Application templates, CSS, JavaScript, and
+The display bundles Leaflet 1.9.4 and loads OpenStreetMap tiles by default. The
+browser needs internet access only for map tiles; observation tables still work if
+the map cannot load. Application templates, CSS, JavaScript modules, Leaflet, and
 htmx are embedded in the executables. No Node build is required.
 
 ```text
@@ -265,16 +265,42 @@ Every handler uses local routes. Mount each once and strip its public prefix:
 | --- | --- | --- |
 | `sim.API()` | `/vessels`, `/time`, `/stations`, `/observations`, ... | `mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))` |
 | `display.NewHandler(...)` | `/observations`, `/stations/{id}/receptions` | `mux.Handle("/tools/ais/display/api/", http.StripPrefix("/tools/ais/display/api", h))` |
-| `u.Assets()` | `/css/app.css`, `/js/*.js` | `mux.Handle("/tools/ais/assets/", http.StripPrefix("/tools/ais/assets", u.Assets()))` |
+| `u.Assets()` | `/css/ui.css`, `/js/ui.js`, `/leaflet/*` | `mux.Handle("/tools/ais/assets/", http.StripPrefix("/tools/ais/assets", u.Assets()))` |
 | `u.ManagerPage()`, `u.DisplayPage()`, `u.HomePage()`, `u.StatusPage()` | Any path; GET and HEAD | `mux.Handle("/tools/ais/manager", page)` |
 
 `u.RenderManager(w, ui.ComponentConfig{ID: "fleet"})` and `u.RenderDisplay` write
-only the component root for a host template, without a document shell. Load
-`u.ManagerResources()` or `u.DisplayResources()` once in that page. The component
-scripts still use document-wide element IDs, so render at most one manager and one
-display per page until host-page components are isolated. Wrap handlers in your
-authentication, authorization, and CSRF middleware; the library sets no CORS or
-authentication policy. See the runnable [UI example](ui/example_test.go).
+only the component root for a host template, without a document shell or scripts.
+Element IDs inside a component start with its ID, so one page can hold several
+managers and displays. Link `u.StylesheetURL()` once and mount each root from your
+own module script, importing `u.ModuleURL()`:
+
+```js
+import { mountManager, mountDisplay } from "/tools/ais/assets/js/ui.js";
+
+const fleet = mountManager(document.getElementById("fleet"), { fetch: hostFetch });
+const map = mountDisplay(document.getElementById("map"));
+// On host navigation or component removal:
+fleet.destroy();
+map.destroy();
+```
+
+The optional `fetch` receives each request URL and options and can add host
+authentication or CSRF headers; the default is the browser's same-origin fetch.
+Mounting a live root again throws. `destroy()` aborts requests, clears timers,
+removes listeners and the map, and restores the rendered markup, so the root can
+be mounted again. A write aborted by `destroy()` may already be applied; a new
+mount reads the current state.
+
+Styles are scoped below `.ais-manager` and `.ais-display`. Optional custom
+properties `--ais-accent`, `--ais-border`, `--ais-surface`, `--ais-error`,
+`--ais-warning`, `--ais-map-height`, and `--ais-map-min-height` theme them. The
+display imports its bundled Leaflet module on mount and never touches a host
+`window.L`; the map follows its root's size, also when the root starts hidden.
+Components need no inline scripts or htmx. A Content-Security-Policy must allow
+the tile origin in `img-src`; `ui.Config.Tiles` replaces the OpenStreetMap tile
+URL and attribution. Wrap handlers in your authentication, authorization, and CSRF
+middleware; the library sets no CORS or authentication policy. See the runnable
+[UI example](ui/example_test.go).
 
 ## Simulator API
 

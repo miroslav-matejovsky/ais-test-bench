@@ -35,11 +35,14 @@ components:
   app: { in: internal/app } # combined composition: public and private API listeners
   simdriver: { in: internal/simdriver } # pacing, serialized commands, clock seam and demo stations
   ais: { in: internal/ais } # AIS type 1 encode and decode, NMEA validation
-  ui-assets: { in: ui/internal/assets } # embedded templates, CSS, JavaScript, and htmx
+  ui-assets: { in: ui/internal/assets } # embedded templates, CSS, JavaScript modules, Leaflet, and htmx
   urlpath: { in: internal/urlpath } # canonical public base path validation
   httpserver: { in: internal/httpserver } # shared HTTP server settings and bounded shutdown
   cli: { in: internal/cli } # shared listen address validation
   logtest: { in: internal/logtest } # test-only in-memory slog handler
+
+  # Browser check fixtures.
+  ui-host-fixture: { in: ui/testdata/host } # host page embedding two benches for host-browser.mjs
 
 deps:
   cmd-ais-testbench:
@@ -62,5 +65,7 @@ deps:
     mayDependOn: [ais, simulatorapi, ui, httpserver, urlpath]
   ui:
     mayDependOn: [ui-assets, urlpath]
+  ui-host-fixture:
+    mayDependOn: [simulator, simdriver, display, ui]
   ais:
     canUse: [go-nmea]

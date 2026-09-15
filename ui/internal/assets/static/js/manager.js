@@ -1,18 +1,31 @@
-(() => {
-    // The component root supplies the public simulator API base, ending in "/".
-    const apiBase = document.querySelector("[data-ais-manager]").dataset.apiBase;
-    const countForm = document.getElementById("vessel-form");
-    const countInput = document.getElementById("vessel-count");
-    const applyCount = document.getElementById("apply-count");
-    const countStatus = document.getElementById("save-status");
-    const speedForm = document.getElementById("speed-form");
-    const speedInput = document.getElementById("speed");
+import { mount } from "./runtime.js";
+import { startStations } from "./stations.js";
+
+// mountManager mounts a manager root rendered by ui.UI.RenderManager: fleet and
+// speed controls, recent messages, and the station editor. It throws when root
+// is not a manager root or is already mounted. options.fetch replaces the
+// browser fetch for this instance, for example to add host CSRF headers.
+export function mountManager(root, options = {}) {
+    return mount(root, "data-ais-manager", "mountManager", options, runtime => {
+        startFleet(runtime);
+        startStations(runtime);
+    });
+}
+
+function startFleet(runtime) {
+    const ref = runtime.ref;
+    const countForm = ref("vessel-form");
+    const countInput = ref("vessel-count");
+    const applyCount = ref("apply-count");
+    const countStatus = ref("save-status");
+    const speedForm = ref("speed-form");
+    const speedInput = ref("speed");
     const presets = [...speedForm.querySelectorAll("[data-speed]")];
-    const speedButtons = [document.getElementById("apply-speed"), ...presets];
-    const speedStatus = document.getElementById("speed-status");
-    const clock = document.getElementById("sim-clock");
-    const fleetStatus = document.getElementById("fleet-status");
-    const messages = document.getElementById("messages");
+    const speedButtons = [ref("apply-speed"), ...presets];
+    const speedStatus = ref("speed-status");
+    const clock = ref("sim-clock");
+    const fleetStatus = ref("fleet-status");
+    const messages = ref("messages");
 
     // runId is the simulation shown. initialized enables the controls after the
     // first coherent refresh of that run.
@@ -26,9 +39,10 @@
     const saving = { count: false, speed: false };
     // A dirty field holds a user edit that polls must not overwrite.
     const dirty = { count: false, speed: false };
+    runtime.onDestroy(() => { generation++; });
 
     async function request(path, options = {}) {
-        const response = await fetch(path, { cache: "no-store", signal: AbortSignal.timeout(5000), ...options });
+        const response = await runtime.fetch(path, options);
         if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
         return response.json();
     }
@@ -41,7 +55,7 @@
     function showClock(time, stale) {
         const speed = time.paused ? "paused" : `${time.speed}x`;
         clock.textContent = `Simulation time: ${formatUTC(time.now)} | Effective speed: ${speed}${stale ? " | stale" : ""}`;
-        clock.classList.toggle("stale", stale);
+        clock.classList.toggle("ais-stale", stale);
     }
     // The receipt time is real local time and shows connection freshness.
     function showFleet(fleet) {
@@ -62,16 +76,16 @@
     function applyMetadata(metadata) {
         const { maxVessels, messageHistoryLimit, speed } = metadata.settings;
         countInput.max = maxVessels;
-        document.getElementById("count-range").textContent = `(0-${maxVessels})`;
+        ref("count-range").textContent = `(0-${maxVessels})`;
         speedInput.max = speed.max;
         speedInput.step = speed.step;
-        document.getElementById("speed-range").textContent = `(0 or ${speed.min}-${speed.max})`;
-        document.getElementById("history-note").textContent =
+        ref("speed-range").textContent = `(0 or ${speed.min}-${speed.max})`;
+        ref("history-note").textContent =
             `The latest ${messageHistoryLimit.toLocaleString()} reports are held in memory. The last 10 are shown here.`;
     }
 
-    countInput.addEventListener("input", () => { dirty.count = true; });
-    speedInput.addEventListener("input", () => { dirty.speed = true; });
+    runtime.listen(countInput, "input", () => { dirty.count = true; });
+    runtime.listen(speedInput, "input", () => { dirty.speed = true; });
 
     // write sends one change and keeps its buttons disabled until the server
     // answers. show renders a confirmed response and returns the status text. A
@@ -86,6 +100,7 @@
             const value = await request(path, {
                 method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
             });
+            if (runtime.destroyed) return;
             if (value.simulationId !== runId) {
                 statusElement.textContent = "The simulator restarted while saving. Review the current values.";
                 return;
@@ -93,25 +108,27 @@
             dirty[kind] = false;
             statusElement.textContent = show(value);
         } catch (error) {
-            statusElement.textContent = `Could not save: ${error.message}`;
+            if (!runtime.destroyed) statusElement.textContent = `Could not save: ${error.message}`;
         } finally {
-            saving[kind] = false;
-            generation++;
-            updateControls();
+            if (!runtime.destroyed) {
+                saving[kind] = false;
+                generation++;
+                updateControls();
+            }
         }
     }
 
-    countForm.addEventListener("submit", event => {
+    runtime.listen(countForm, "submit", event => {
         event.preventDefault();
-        write("count", countStatus, `${apiBase}vessels`, { count: Number(countInput.value) }, fleet => {
+        write("count", countStatus, "vessels", { count: Number(countInput.value) }, fleet => {
             countInput.value = fleet.vessels.length;
             showFleet(fleet);
             return `Vessel count set to ${fleet.vessels.length}.`;
         });
     });
-    speedForm.addEventListener("submit", event => {
+    runtime.listen(speedForm, "submit", event => {
         event.preventDefault();
-        write("speed", speedStatus, `${apiBase}time`, { speed: Number(speedInput.value) }, metadata => {
+        write("speed", speedStatus, "time", { speed: Number(speedInput.value) }, metadata => {
             speedInput.value = metadata.time.speed;
             lastTime = metadata.time;
             showClock(metadata.time, false);
@@ -119,7 +136,7 @@
         });
     });
     for (const button of presets) {
-        button.addEventListener("click", () => {
+        runtime.listen(button, "click", () => {
             speedInput.value = button.dataset.speed;
             dirty.speed = true;
             speedForm.requestSubmit();
@@ -129,10 +146,9 @@
     async function refresh() {
         const started = generation;
         try {
-            const [fleet, history, metadata] = await Promise.all([
-                request(`${apiBase}vessels`), request(`${apiBase}messages`), request(`${apiBase}metadata`),
-            ]);
-            // A write started or finished during this poll; its result wins.
+            const [fleet, history, metadata] = await Promise.all([request("vessels"), request("messages"), request("metadata")]);
+            // A write started or finished during this poll, or the mount was
+            // destroyed; the newer state wins.
             if (started !== generation) return;
             // Separate reads can straddle a restart; never render mixed runs.
             if (fleet.simulationId !== metadata.simulationId || history.simulationId !== metadata.simulationId) {
@@ -163,11 +179,13 @@
                 .map(message => `${formatUTC(message.timestamp)}  #${message.sequence}  MMSI ${message.mmsi}  ${message.sentence.trim()}`)
                 .join("\n") || "No messages stored.";
         } catch (error) {
+            if (runtime.destroyed) return;
             fleetStatus.textContent = `Updates unavailable (${error.message}). Retrying...`;
             if (lastTime) showClock(lastTime, true);
         } finally {
-            window.setTimeout(refresh, 1000);
+            runtime.later(refresh, 1000);
         }
     }
+    updateControls();
     refresh();
-})();
+}

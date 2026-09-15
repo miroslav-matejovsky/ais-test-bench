@@ -1,7 +1,7 @@
 // Package ui renders embeddable manager and display components, standalone
-// pages, and embedded assets. It holds no simulation or display state: component
-// scripts poll their configured JSON APIs once per real second, also while the
-// simulation is paused.
+// pages, and embedded assets. It holds no simulation or display state: mounted
+// components poll their configured JSON APIs once per real second, also while
+// the simulation is paused.
 //
 // # URLs and mounting
 //
@@ -13,32 +13,77 @@
 // or dot segments. An empty API base disables that component. HomeURL,
 // ManagerURL, DisplayURL, and StatusURL are optional links: absolute paths or
 // absolute http(s) URLs without user info. Relative, scheme-relative,
-// javascript:, data:, and other links are rejected.
+// javascript:, data:, and other links are rejected. Tiles optionally replaces the
+// OpenStreetMap tile source with a URL template containing {z}, {x}, and {y} and
+// a required plain-text attribution.
 //
-// Assets serves local paths such as /css/app.css; mount it at AssetsBase with
-// http.StripPrefix. Page handlers ignore their mount path, so mount them wherever
-// the configured links point. Pages and assets answer GET and HEAD and return 405
-// with Allow otherwise. No handler sets CORS or authentication policy, so host
-// middleware can wrap each one, and the package never registers routes on a mux.
+// Assets serves local paths such as /css/ui.css and /js/ui.js; mount it at
+// AssetsBase with http.StripPrefix. Page handlers ignore their mount path, so
+// mount them wherever the configured links point. Pages and assets answer GET and
+// HEAD and return 405 with Allow otherwise. No handler sets CORS or
+// authentication policy, so host middleware can wrap each one, and the package
+// never registers routes on a mux.
 //
 // # Components and pages
 //
 // RenderManager and RenderDisplay write one root element with the caller's ID,
 // class ais-manager or ais-display, a data-ais-manager or data-ais-display marker,
-// and the escaped API base in the inert data-api-base attribute. They write no
-// document shell, navigation, headings, or scripts, and write nothing on error.
-// Hosts load ManagerResources or DisplayResources once. Scripts locate their root
-// by its marker and build every request below data-api-base. Element IDs inside
-// components are still document-wide, so one page holds at most one manager and
-// one display.
+// and the escaped API base in the inert data-api-base attribute. The display root
+// also carries its tile source in data-tile-* attributes. They write no document
+// shell, navigation, headings, scripts, or inline event handlers, and write
+// nothing on error. Element IDs inside a component start with its ID and "-", so
+// one page holds any number of components with distinct IDs. Scripts find their
+// elements by data-ref inside their root.
+//
+// A host page links StylesheetURL once and mounts rendered roots from its own
+// module script with the module at ModuleURL:
+//
+//	import { mountManager, mountDisplay } from "/tools/ais/assets/js/ui.js";
+//	const manager = mountManager(document.getElementById("fleet"), { fetch: hostFetch });
+//	manager.destroy();
 //
 // ManagerPage, DisplayPage, HomePage, and StatusPage wrap the same components in
-// a document with header links from Config. The manager page loads htmx and adds
-// a status check only when StatusURL is set. Pages render into a buffer; a
-// failure is logged with component=ui and returns 500 without partial HTML.
-// Templates come from the internal assets package: document.tmpl, components/,
-// and pages/, parsed once in New. Each page file defines "page:title" and
-// "page:content", plus fragments used only by that page.
+// a document with header links from Config. Component pages link the component
+// stylesheet and page.css and load standalone.js, a module that mounts every
+// component root with the same functions; pages contain no inline scripts. The
+// manager page loads htmx and adds a status check only when StatusURL is set.
+// Pages render into a buffer; a failure is logged with component=ui and returns
+// 500 without partial HTML. Templates come from the internal assets package:
+// document.tmpl, components/, and pages/, parsed once in New. Each page file
+// defines "page:title" and "page:content", plus fragments used only by that page.
+//
+// # Browser lifecycle
+//
+// Rendering starts no browser work. mountManager(root, options) and
+// mountDisplay(root, options) start it and return { destroy }. options.fetch
+// optionally replaces the browser fetch for that instance, for example to add
+// authentication or CSRF headers; it receives each request URL and a RequestInit
+// carrying an abort signal, and returns a Response promise. Mounting a live root
+// again, or a root of the other component, throws. The manager owns its station
+// editor.
+//
+// destroy is idempotent. It aborts in-flight reads and writes, clears timers,
+// disconnects the map resize observer, removes the Leaflet map, and restores the
+// server-rendered markup, which drops every listener and dynamic node. A write
+// aborted by destroy may already be committed by the server; a later mount of the
+// same root reads the current state. Generation and run guards discard replies
+// that arrive after destroy or after a newer request.
+//
+// The stylesheet scopes every rule below .ais-manager or .ais-display and imports
+// the bundled Leaflet stylesheet, whose classes use the leaflet- prefix. Hosts
+// theme components with optional custom properties on a root or an ancestor:
+// --ais-accent, --ais-border, --ais-surface, --ais-error, --ais-warning,
+// --ais-map-height, and --ais-map-min-height. The display layout switches to one
+// column through a container query on its root, so the root needs a definite
+// inline size from the host layout.
+//
+// The display imports the bundled Leaflet 1.9.4 ES module when mounted, so a host
+// window.L is neither required nor changed, and a failed import leaves the tables
+// working. The map follows root resizes, including a root that starts hidden.
+// Components need no inline scripts, external scripts, or htmx. A host
+// Content-Security-Policy must allow the asset origin in script-src and style-src,
+// the API origins in connect-src, and the tile origin in img-src. Leaflet sets
+// element styles through the CSSOM, which style-src 'self' permits.
 //
 // # Browser behavior
 //
@@ -67,10 +112,10 @@
 // bytes and reception-time receiver settings. Selection generations and run
 // identities reject late replies; 404 resets removed station selection and 409
 // clears history cursors. A new run clears all received and selected state.
-// Browser-only deterministic checks are documented in testdata/README.md.
+// Browser-only checks are documented in testdata/README.md.
 //
-// The manager's stations.js independently polls stations below its API base and
-// renders site configuration and receiving capabilities. It creates, edits,
+// The manager's station editor independently polls stations below its API base
+// and renders site configuration and receiving capabilities. It creates, edits,
 // disables, and deletes stations through revision-checked simulator routes,
 // including a preset disabling channel B. Drafts retain their starting
 // run/revision across polls. Conflicts display current values beside the

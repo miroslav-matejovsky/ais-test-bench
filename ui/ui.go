@@ -16,12 +16,13 @@ import (
 	"github.com/miroslav-matejovsky/ais-testbench/ui/internal/assets"
 )
 
-// Leaflet is loaded from a CDN with subresource integrity until it is bundled.
+// Asset paths below AssetsBase.
 const (
-	leafletCSS          = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-	leafletCSSIntegrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-	leafletJS           = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-	leafletJSIntegrity  = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+	stylesheetPath = "css/ui.css"       // Component styles; imports the bundled Leaflet stylesheet.
+	pageStylePath  = "css/page.css"     // Standalone document layout.
+	modulePath     = "js/ui.js"         // Exports mountManager and mountDisplay.
+	standalonePath = "js/standalone.js" // Mounts every component of a standalone page.
+	htmxPath       = "js/htmx.min.js"   // Standalone status checks only.
 )
 
 // Component root IDs used by the standalone pages.
@@ -35,6 +36,7 @@ const (
 var contentTypes = map[string]string{
 	".css": "text/css; charset=utf-8",
 	".js":  "text/javascript; charset=utf-8",
+	".png": "image/png",
 }
 
 // UI renders manager and display components and standalone pages from embedded
@@ -53,17 +55,20 @@ type componentData struct {
 	ID         string
 	APIBase    string
 	ManagerURL string
+	Tiles      MapTiles
 }
 
 // pageData is the view model of the standalone document.
 type pageData struct {
-	HomeURL    string
-	ManagerURL string
-	DisplayURL string
-	StatusURL  string
-	Resources  Resources
-	Component  template.HTML // Output of RenderManager or RenderDisplay.
-	Status     statusData
+	HomeURL     string
+	ManagerURL  string
+	DisplayURL  string
+	StatusURL   string
+	Stylesheets []string
+	Module      string        // Module script URL; empty on pages without components.
+	Scripts     []string      // Deferred classic script URLs.
+	Component   template.HTML // Output of RenderManager or RenderDisplay.
+	Status      statusData
 }
 
 // statusData is the status page view model.
@@ -100,13 +105,15 @@ func New(config Config) (*UI, error) {
 	}, nil
 }
 
-// Assets serves embedded stylesheets and scripts at local paths such as
-// /css/app.css. Mount it at AssetsBase and strip that base once:
+// Assets serves embedded stylesheets, ES modules, and the bundled Leaflet files
+// at local paths such as /css/ui.css. Mount it at AssetsBase and strip that base
+// once:
 //
 //	mux.Handle("/tools/ais/assets/", http.StripPrefix("/tools/ais/assets", u.Assets()))
 //
 // It answers GET and HEAD, returns 405 otherwise, and 404 for directories and
-// unknown files. CSS and JavaScript have fixed content types.
+// unknown files. CSS, JavaScript, and PNG files have fixed content types. Modules
+// import each other by relative URL, so every asset must stay below one base.
 func (u *UI) Assets() http.Handler {
 	files := http.FileServerFS(assets.StaticFiles)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,23 +133,17 @@ func (u *UI) Assets() http.Handler {
 	})
 }
 
-// ManagerResources lists the stylesheet and scripts a host page loads for a
-// manager component.
-func (u *UI) ManagerResources() Resources {
-	return Resources{
-		Stylesheets: []Resource{{URL: u.config.AssetsBase + "css/app.css"}},
-		Scripts:     []Resource{{URL: u.config.AssetsBase + "js/manager.js"}, {URL: u.config.AssetsBase + "js/stations.js"}},
-	}
+// StylesheetURL returns the component stylesheet URL. A host page links it once
+// for any number of manager and display components.
+func (u *UI) StylesheetURL() string {
+	return u.config.AssetsBase + stylesheetPath
 }
 
-// DisplayResources lists the stylesheets and scripts a host page loads for a
-// display component, including Leaflet from its CDN with integrity values. The
-// display keeps its tables working when Leaflet cannot load.
-func (u *UI) DisplayResources() Resources {
-	return Resources{
-		Stylesheets: []Resource{{URL: leafletCSS, Integrity: leafletCSSIntegrity}, {URL: u.config.AssetsBase + "css/app.css"}},
-		Scripts:     []Resource{{URL: leafletJS, Integrity: leafletJSIntegrity}, {URL: u.config.AssetsBase + "js/display.js"}},
-	}
+// ModuleURL returns the ES module URL exporting mountManager and mountDisplay.
+// A host page imports it from its own module script and mounts every rendered
+// root; the components start no work until mounted.
+func (u *UI) ModuleURL() string {
+	return u.config.AssetsBase + modulePath
 }
 
 // RenderManager writes the manager component markup for a host template: one
@@ -158,7 +159,7 @@ func (u *UI) RenderManager(w io.Writer, config ComponentConfig) error {
 }
 
 // RenderDisplay writes the display component markup, as RenderManager does,
-// using DisplayAPIBase and the optional ManagerURL link.
+// using DisplayAPIBase, the optional ManagerURL link, and the map tile source.
 func (u *UI) RenderDisplay(w io.Writer, config ComponentConfig) error {
 	data, err := u.component("display", config, u.config.DisplayAPIBase)
 	if err != nil {
@@ -182,11 +183,9 @@ func (u *UI) ManagerPage() (http.Handler, error) {
 	if err := u.RenderManager(&component, ComponentConfig{ID: managerPageID}); err != nil {
 		return nil, err
 	}
-	data := u.pageData()
-	data.Component = template.HTML(component.String()) // Escaped by the component template.
-	data.Resources = u.ManagerResources()
+	data := u.componentPageData(component.String())
 	if u.config.StatusURL != "" {
-		data.Resources.Scripts = append(data.Resources.Scripts, Resource{URL: u.config.AssetsBase + "js/htmx.min.js"})
+		data.Scripts = []string{u.config.AssetsBase + htmxPath}
 	}
 	return u.page("manager", "document", func(*http.Request) pageData { return data }), nil
 }
@@ -198,9 +197,7 @@ func (u *UI) DisplayPage() (http.Handler, error) {
 	if err := u.RenderDisplay(&component, ComponentConfig{ID: displayPageID}); err != nil {
 		return nil, err
 	}
-	data := u.pageData()
-	data.Component = template.HTML(component.String()) // Escaped by the component template.
-	data.Resources = u.DisplayResources()
+	data := u.componentPageData(component.String())
 	return u.page("display", "document", func(*http.Request) pageData { return data }), nil
 }
 
@@ -238,16 +235,31 @@ func (u *UI) component(name string, config ComponentConfig, apiBase string) (com
 	if !componentID.MatchString(config.ID) {
 		return componentData{}, fmt.Errorf("render %s: invalid component ID %q", name, config.ID)
 	}
-	return componentData{ID: config.ID, APIBase: apiBase, ManagerURL: u.config.ManagerURL}, nil
+	tiles := u.config.Tiles
+	if tiles == (MapTiles{}) {
+		tiles = defaultTiles
+	}
+	return componentData{ID: config.ID, APIBase: apiBase, ManagerURL: u.config.ManagerURL, Tiles: tiles}, nil
 }
 
-// pageData returns the links and default resources shared by every page.
+// pageData returns the links and page stylesheet shared by every page.
 func (u *UI) pageData() pageData {
 	return pageData{
 		HomeURL: u.config.HomeURL, ManagerURL: u.config.ManagerURL, DisplayURL: u.config.DisplayURL,
-		StatusURL: u.config.StatusURL,
-		Resources: Resources{Stylesheets: []Resource{{URL: u.config.AssetsBase + "css/app.css"}}},
+		StatusURL:   u.config.StatusURL,
+		Stylesheets: []string{u.config.AssetsBase + pageStylePath},
 	}
+}
+
+// componentPageData returns page data embedding rendered component markup. The
+// page loads the same stylesheet and module as a host page, through a module
+// that mounts every component root, so pages contain no inline scripts.
+func (u *UI) componentPageData(component string) pageData {
+	data := u.pageData()
+	data.Stylesheets = []string{u.StylesheetURL(), u.config.AssetsBase + pageStylePath}
+	data.Module = u.config.AssetsBase + standalonePath
+	data.Component = template.HTML(component) // Escaped by the component template.
+	return data
 }
 
 // page returns a GET and HEAD handler rendering template name from a page set.

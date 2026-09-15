@@ -1,70 +1,70 @@
 {{define "manager"}}
 <div id="{{.ID}}" class="ais-manager" data-ais-manager data-api-base="{{.APIBase}}">
 <p>Manage the active fleet and simulation speed. New vessels start at random positions off Rotterdam.</p>
-<p id="sim-clock" class="clock">Simulation time: connecting...</p>
-<form id="vessel-form" aria-describedby="count-help">
-    <label for="vessel-count">Number of vessels <span id="count-range"></span></label>
-    <input id="vessel-count" name="count" type="number" min="0" step="1" required disabled>
-    <button id="apply-count" type="submit" disabled>Apply count</button>
+<p class="ais-clock" data-ref="sim-clock">Simulation time: connecting...</p>
+<form class="ais-toolbar" data-ref="vessel-form" aria-describedby="{{.ID}}-count-help">
+    <label for="{{.ID}}-vessel-count">Number of vessels <span data-ref="count-range"></span></label>
+    <input id="{{.ID}}-vessel-count" data-ref="vessel-count" name="count" type="number" min="0" step="1" required disabled>
+    <button data-ref="apply-count" type="submit" disabled>Apply count</button>
 </form>
-<p id="count-help">Set the count to 0 to stop generating messages. Restarting resets the fleet and message history.</p>
-<p id="save-status" role="status"></p>
-<form id="speed-form" aria-describedby="speed-help">
-    <label for="speed">Simulation speed <span id="speed-range"></span></label>
-    <input id="speed" name="speed" type="number" min="0" max="100" step="0.01" required disabled>
-    <button id="apply-speed" type="submit" disabled>Apply speed</button>
-    <span class="presets" role="group" aria-label="Speed presets">
+<p id="{{.ID}}-count-help">Set the count to 0 to stop generating messages. Restarting resets the fleet and message history.</p>
+<p data-ref="save-status" role="status"></p>
+<form class="ais-toolbar" data-ref="speed-form" aria-describedby="{{.ID}}-speed-help">
+    <label for="{{.ID}}-speed">Simulation speed <span data-ref="speed-range"></span></label>
+    <input id="{{.ID}}-speed" data-ref="speed" name="speed" type="number" min="0" max="100" step="0.01" required disabled>
+    <button data-ref="apply-speed" type="submit" disabled>Apply speed</button>
+    <span class="ais-presets" role="group" aria-label="Speed presets">
         <button type="button" data-speed="0" disabled>Pause</button>
         <button type="button" data-speed="0.5" disabled>0.5x</button>
         <button type="button" data-speed="1" disabled>1x</button>
         <button type="button" data-speed="2" disabled>2x</button>
     </span>
 </form>
-<p id="speed-help">Speed multiplies how fast simulation time passes; 0 pauses it. Vessels keep reporting their speed in knots.</p>
-<p id="speed-status" role="status"></p>
-<p id="fleet-status" role="status">Connecting...</p>
-<section aria-labelledby="stations-heading">
-    <h2 id="stations-heading">AIS base stations</h2>
+<p id="{{.ID}}-speed-help">Speed multiplies how fast simulation time passes; 0 pauses it. Vessels keep reporting their speed in knots.</p>
+<p data-ref="speed-status" role="status"></p>
+<p data-ref="fleet-status" role="status">Connecting...</p>
+<section aria-labelledby="{{.ID}}-stations-heading">
+    <h2 id="{{.ID}}-stations-heading">AIS base stations</h2>
     <p>Configure synthetic receiving sites. Changes affect future transmissions. More negative sensitivity values receive weaker signals.</p>
-    <p id="station-status" role="status">Connecting to station configuration...</p>
-    <div class="table-scroll">
-        <table id="stations-table">
+    <p data-ref="station-status" role="status">Connecting to station configuration...</p>
+    <div class="ais-table-scroll">
+        <table>
             <caption>Receiving sites and capabilities</caption>
             <thead><tr><th scope="col">Station</th><th scope="col">Location</th><th scope="col">Channels</th><th scope="col">Capabilities</th><th scope="col">Actions</th></tr></thead>
-            <tbody id="stations-body"></tbody>
+            <tbody data-ref="stations-body"></tbody>
         </table>
     </div>
-    <button id="station-new" type="button" disabled>Add station</button>
-    <details id="station-editor">
+    <button data-ref="station-new" type="button" disabled>Add station</button>
+    <details data-ref="station-editor">
         <summary>Station configuration editor</summary>
-        <p id="station-edit-label">Select a station or add one.</p>
-        <form id="station-form" class="station-form">
-            <fieldset id="station-fields" disabled>
+        <p data-ref="station-edit-label">Select a station or add one.</p>
+        <form class="ais-station-form" data-ref="station-form">
+            <fieldset data-ref="station-fields" disabled>
                 <legend>Site and receiving capabilities</legend>
-                <div id="station-site-fields" class="station-grid"></div>
-                <div id="station-channel-fields" class="station-grid"></div>
+                <div class="ais-station-grid" data-ref="station-site-fields"></div>
+                <div class="ais-station-grid" data-ref="station-channel-fields"></div>
                 <fieldset><legend>Shadow sectors</legend>
                     <p>Clockwise from true north. Start is included; end is excluded. A start above the end wraps across north. Sectors must not overlap.</p>
-                    <div id="station-sectors"></div>
-                    <p id="station-sector-error" class="field-error"></p>
-                    <button id="station-add-sector" type="button">Add shadow sector</button>
+                    <div data-ref="station-sectors"></div>
+                    <p class="ais-field-error" data-ref="station-sector-error"></p>
+                    <button data-ref="station-add-sector" type="button">Add shadow sector</button>
                 </fieldset>
-                <p id="station-definition-error" class="field-error" role="alert"></p>
-                <button id="station-save" type="submit">Save station</button>
-                <button id="station-cancel" type="button">Discard draft</button>
+                <p class="ais-field-error" data-ref="station-definition-error" role="alert"></p>
+                <button data-ref="station-save" type="submit">Save station</button>
+                <button data-ref="station-cancel" type="button">Discard draft</button>
             </fieldset>
         </form>
-        <div id="station-conflict" hidden>
+        <div data-ref="station-conflict" hidden>
             <p>The server configuration changed. Your draft is preserved. Compare it with the current definition before retrying.</p>
-            <pre id="station-current"></pre>
-            <button id="station-rebase" type="button">Keep draft against this revision</button>
+            <pre data-ref="station-current"></pre>
+            <button data-ref="station-rebase" type="button">Keep draft against this revision</button>
         </div>
     </details>
     <p><a href="{{.APIBase}}stations">Station configuration JSON</a> | <a href="{{.APIBase}}observations">Received observations JSON</a></p>
 </section>
 <h2>Latest AIS messages</h2>
-<p id="history-note">The last 10 retained reports are shown here.</p>
-<pre id="messages">Loading messages...</pre>
+<p data-ref="history-note">The last 10 retained reports are shown here.</p>
+<pre data-ref="messages">Loading messages...</pre>
 <p><a href="{{.APIBase}}messages">View stored messages as JSON</a> | <a href="{{.APIBase}}metadata">View metadata as JSON</a></p>
 <noscript>Enable JavaScript to manage vessels.</noscript>
 </div>

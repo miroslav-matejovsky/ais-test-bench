@@ -31,7 +31,7 @@ func TestStandaloneRoutes(t *testing.T) {
 		contains     []string
 		notContains  []string
 	}{
-		{method: http.MethodGet, path: "/display", wantStatus: http.StatusOK, contains: []string{"<h1>Display</h1>", `<a href="/display">Display</a>`, `data-api-base="/display/api/"`, "/assets/js/display.js", `href="` + u.server.URL + `/manager">Open manager</a>`}, notContains: []string{`href="/manager"`, "/static/"}},
+		{method: http.MethodGet, path: "/display", wantStatus: http.StatusOK, contains: []string{"<h1>Display</h1>", `<a href="/display">Display</a>`, `data-api-base="/display/api/"`, `<script type="module" src="/assets/js/standalone.js">`, `href="` + u.server.URL + `/manager">Open manager</a>`}, notContains: []string{`href="/manager"`, "/static/"}},
 		{method: http.MethodHead, path: "/display", wantStatus: http.StatusOK},
 		{method: http.MethodPost, path: "/display", wantStatus: http.StatusMethodNotAllowed},
 		{method: http.MethodGet, path: "/display/api/observations?stations=all", wantStatus: http.StatusOK, contains: []string{`"simulationId":"run-1"`, `"targets":[{`}},

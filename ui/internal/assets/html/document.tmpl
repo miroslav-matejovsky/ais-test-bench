@@ -5,11 +5,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{template "page:title" .}} - AIS Test Bench</title>
-    {{- range .Resources.Stylesheets}}
-    <link rel="stylesheet" href="{{.URL}}"{{with .Integrity}} integrity="{{.}}" crossorigin=""{{end}}>
+    {{- range .Stylesheets}}
+    <link rel="stylesheet" href="{{.}}">
     {{- end}}
-    {{- range .Resources.Scripts}}
-    <script defer src="{{.URL}}"{{with .Integrity}} integrity="{{.}}" crossorigin=""{{end}}></script>
+    {{- with .Module}}
+    <script type="module" src="{{.}}"></script>
+    {{- end}}
+    {{- range .Scripts}}
+    <script defer src="{{.}}"></script>
     {{- end}}
 </head>
 <body>

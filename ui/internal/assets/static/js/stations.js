@@ -1,28 +1,32 @@
-(() => {
-    // The manager component root supplies the public simulator API base, ending in "/".
-    const apiBase = document.querySelector("[data-ais-manager]").dataset.apiBase;
-    const byId = id => document.getElementById(id);
-    const form = byId("station-form");
-    const fields = byId("station-fields");
-    const status = byId("station-status");
-    const editor = byId("station-editor");
-    const conflictPanel = byId("station-conflict");
+// startStations runs the manager's station table and editor inside a mounted
+// manager runtime.
+export function startStations(runtime) {
+    const ref = runtime.ref;
+    const form = ref("station-form");
+    const fields = ref("station-fields");
+    const status = ref("station-status");
+    const editor = ref("station-editor");
+    const conflictPanel = ref("station-conflict");
+    const sectorsElement = ref("station-sectors");
     const controls = new Map();
     let snapshot = null;
     let draft = null; // Identity/revision at the time the draft was opened, never rebased by polling.
     let saving = false;
     let generation = 0;
     let conflict = false;
+    runtime.onDestroy(() => { generation++; });
 
     function element(tag, text) {
         const node = document.createElement(tag);
         if (text !== undefined) node.textContent = text;
         return node;
     }
+    // input creates a labelled control. IDs derive from the root ID, so several
+    // managers on one page keep unique label and error associations.
     function input(parent, path, label, type, min, max) {
         const wrapper = element("div");
         const field = element("input");
-        field.id = `station-${path.replaceAll(".", "-")}`;
+        field.id = runtime.id(`station-${path.replaceAll(".", "-")}`);
         field.type = type;
         if (type !== "checkbox") field.required = true;
         if (type === "number") {
@@ -33,7 +37,7 @@
         const caption = element("label", label);
         caption.htmlFor = field.id;
         const error = element("span");
-        error.className = "field-error";
+        error.className = "ais-field-error";
         error.id = `${field.id}-error`;
         field.setAttribute("aria-describedby", error.id);
         wrapper.append(caption, field, error);
@@ -41,7 +45,7 @@
         controls.set(path, { field, error });
         return field;
     }
-    const site = byId("station-site-fields");
+    const site = ref("station-site-fields");
     input(site, "name", "Name (up to 80 characters)", "text");
     input(site, "enabled", "Station enabled", "checkbox");
     input(site, "latitude", "Latitude (degrees)", "number", -85, 85);
@@ -52,7 +56,7 @@
     for (const channel of ["A", "B"]) {
         const group = element("fieldset");
         group.append(element("legend", `Channel ${channel} (${channel === "A" ? "161.975" : "162.025"} MHz)`));
-        byId("station-channel-fields").append(group);
+        ref("station-channel-fields").append(group);
         const key = `channel${channel}`;
         input(group, `${key}.enabled`, "Channel enabled", "checkbox");
         input(group, `${key}.sensitivityDbm`, "Sensitivity (dBm)", "number", -125, -80);
@@ -62,8 +66,8 @@
 
     function sectorRow(sector) {
         const row = element("div");
-        row.className = "station-sector station-grid";
-        const index = byId("station-sectors").children.length;
+        row.className = "ais-station-sector ais-station-grid";
+        const index = sectorsElement.children.length;
         for (const [key, label, max] of [["startDegrees", "Start bearing", 359.999999], ["endDegrees", "End bearing", 359.999999], ["lossDb", "Loss (dB)", 60]]) {
             const field = input(row, `shadowSectors.${index}.${key}`, label, "number", 0, max);
             field.value = sector[key];
@@ -71,23 +75,23 @@
         }
         const remove = element("button", "Remove sector");
         remove.type = "button";
-        remove.addEventListener("click", () => {
+        runtime.listen(remove, "click", () => {
             const sectors = readSectors();
             sectors.splice([...row.parentNode.children].indexOf(row), 1);
             renderSectors(sectors);
         });
         row.append(remove);
-        byId("station-sectors").append(row);
+        sectorsElement.append(row);
     }
     function readSectors() {
-        return [...byId("station-sectors").children].map(row => Object.fromEntries(
+        return [...sectorsElement.children].map(row => Object.fromEntries(
             [...row.querySelectorAll("input")].map(field => [field.dataset.sectorField, Number(field.value)])));
     }
     function renderSectors(sectors) {
         for (const key of controls.keys()) if (key.startsWith("shadowSectors.")) controls.delete(key);
-        byId("station-sectors").replaceChildren();
+        sectorsElement.replaceChildren();
         for (const sector of sectors) sectorRow(sector);
-        byId("station-add-sector").disabled = sectors.length >= 8;
+        ref("station-add-sector").disabled = sectors.length >= 8;
     }
     function definition() {
         const result = { channelA: {}, channelB: {}, shadowSectors: readSectors() };
@@ -105,8 +109,8 @@
             error.textContent = "";
             field.removeAttribute("aria-invalid");
         }
-        byId("station-definition-error").textContent = "";
-        byId("station-sector-error").textContent = "";
+        ref("station-definition-error").textContent = "";
+        ref("station-sector-error").textContent = "";
     }
     function fieldErrors(errors = {}) {
         for (const [path, message] of Object.entries(errors)) {
@@ -114,12 +118,12 @@
             if (control) {
                 control.error.textContent = message;
                 control.field.setAttribute("aria-invalid", "true");
-            } else if (path.startsWith("shadowSectors")) byId("station-sector-error").textContent += `${message}\n`;
-            else byId("station-definition-error").textContent += `${path}: ${message}\n`;
+            } else if (path.startsWith("shadowSectors")) ref("station-sector-error").textContent += `${message}\n`;
+            else ref("station-definition-error").textContent += `${path}: ${message}\n`;
         }
     }
     async function request(path, options = {}) {
-        const response = await fetch(path, { cache: "no-store", signal: AbortSignal.timeout(5000), ...options });
+        const response = await runtime.fetch(path, options);
         const body = await response.text();
         let value;
         try { value = JSON.parse(body); } catch { throw new Error(body || `HTTP ${response.status}`); }
@@ -132,18 +136,18 @@
         return value;
     }
     function updateControls() {
-        byId("station-new").disabled = !snapshot || saving || snapshot.stations.length >= snapshot.settings.maxStations;
+        ref("station-new").disabled = !snapshot || saving || snapshot.stations.length >= snapshot.settings.maxStations;
         fields.disabled = !draft || saving;
-        byId("station-save").disabled = !draft || saving || conflict;
-        byId("station-rebase").disabled = saving;
-        for (const button of byId("stations-body").querySelectorAll("button")) button.disabled = saving;
+        ref("station-save").disabled = !draft || saving || conflict;
+        ref("station-rebase").disabled = saving;
+        for (const button of ref("stations-body").querySelectorAll("button")) button.disabled = saving;
     }
     function showConflict() {
         conflict = true;
         conflictPanel.hidden = false;
         const current = snapshot.stations.find(s => s.id === draft.id);
         const sameRun = snapshot.simulationId === draft.simulationId;
-        byId("station-current").textContent = JSON.stringify({ simulationId: snapshot.simulationId, stationSetRevision: snapshot.stationSetRevision,
+        ref("station-current").textContent = JSON.stringify({ simulationId: snapshot.simulationId, stationSetRevision: snapshot.stationSetRevision,
             current: sameRun && current ? current.definition : "Original station unavailable. Keeping the draft will create a new station." }, null, 2);
         updateControls();
     }
@@ -173,7 +177,7 @@
         }
         renderSectors(d.shadowSectors);
         clearErrors();
-        byId("station-edit-label").textContent = draft.id ? `Editing ${station.definition.name} (${draft.id}), revision ${draft.revision}` : "Adding a receiving site";
+        ref("station-edit-label").textContent = draft.id ? `Editing ${station.definition.name} (${draft.id}), revision ${draft.revision}` : "Adding a receiving site";
         editor.open = true;
         updateControls();
         controls.get("name").field.focus();
@@ -182,6 +186,7 @@
         const rows = snapshot.stations.map(station => {
             const d = station.definition;
             const row = element("tr");
+            row.dataset.key = station.id;
             const channels = [d.channelA.enabled ? "A" : "", d.channelB.enabled ? "B" : ""].filter(Boolean).join(" + ") || "none";
             for (const text of [`${d.name} (${station.id})${d.enabled ? "" : " - disabled"}`, `${d.latitude}, ${d.longitude}`, channels,
                 `${d.antennaHeightMeters} m; A/B ${d.channelA.sensitivityDbm}/${d.channelB.sensitivityDbm} dBm; gain ${d.receiveGainDbi} dBi; feeder ${d.feederLossDb} dB`]) row.append(element("td", text));
@@ -190,13 +195,13 @@
                 ["Disable B preset", () => mutate(station, { ...d, channelB: { ...d.channelB, enabled: false } })], ["Delete", () => mutate(station, null)]]) {
                 const button = element("button", label);
                 button.type = "button";
-                button.addEventListener("click", run);
+                runtime.listen(button, "click", run);
                 actions.append(button);
             }
             row.append(actions);
             return row;
         });
-        byId("stations-body").replaceChildren(...rows);
+        ref("stations-body").replaceChildren(...rows);
     }
     async function save(id, value, identity) {
         if (saving) return;
@@ -206,7 +211,7 @@
         updateControls();
         status.textContent = "Saving station change...";
         try {
-            const path = id ? `${apiBase}stations/${encodeURIComponent(id)}` : `${apiBase}stations`;
+            const path = id ? `stations/${encodeURIComponent(id)}` : "stations";
             const deleting = value === null;
             const query = new URLSearchParams({ simulationId: identity.simulationId, stationSetRevision: identity.revision });
             const result = await request(deleting ? `${path}?${query}` : path, {
@@ -214,6 +219,7 @@
                 headers: { "Content-Type": "application/json" },
                 ...(deleting ? {} : { body: JSON.stringify({ simulationId: identity.simulationId, stationSetRevision: identity.revision, definition: value }) }),
             });
+            if (runtime.destroyed) return;
             draft = null;
             conflict = false;
             conflictPanel.hidden = true;
@@ -221,53 +227,64 @@
             accept(result);
             status.textContent += " | Change applied.";
         } catch (error) {
+            if (runtime.destroyed) return;
             fieldErrors(error.fields);
             status.textContent = `Could not save: ${error.message}`;
             if (error.status === 409) {
-                try { accept(await request(`${apiBase}stations`)); } catch (refreshError) { status.textContent += `; refresh failed: ${refreshError.message}`; }
+                try {
+                    const current = await request("stations");
+                    if (runtime.destroyed) return;
+                    accept(current);
+                } catch (refreshError) {
+                    if (runtime.destroyed) return;
+                    status.textContent += `; refresh failed: ${refreshError.message}`;
+                }
                 if (draft) showConflict();
                 status.textContent = "Configuration changed. Review current values before retrying.";
             }
         } finally {
-            saving = false;
-            generation++;
-            updateControls();
+            if (!runtime.destroyed) {
+                saving = false;
+                generation++;
+                updateControls();
+            }
         }
     }
     function mutate(station, value) {
         if (draft) { status.textContent = "Save or discard the open draft before another station change."; return; }
         save(station.id, value, { simulationId: snapshot.simulationId, revision: snapshot.stationSetRevision });
     }
-    form.addEventListener("submit", event => {
+    runtime.listen(form, "submit", event => {
         event.preventDefault();
         if (draft && !conflict && form.reportValidity()) save(draft.id, definition(), draft);
     });
-    byId("station-new").addEventListener("click", () => begin(null));
-    byId("station-cancel").addEventListener("click", () => {
+    runtime.listen(ref("station-new"), "click", () => begin(null));
+    runtime.listen(ref("station-cancel"), "click", () => {
         draft = null; conflict = false; conflictPanel.hidden = true; editor.open = false; clearErrors(); updateControls();
     });
-    byId("station-rebase").addEventListener("click", () => {
+    runtime.listen(ref("station-rebase"), "click", () => {
         if (!draft || saving) return;
         if (draft.simulationId !== snapshot.simulationId || !snapshot.stations.some(s => s.id === draft.id)) draft.id = null;
         draft.simulationId = snapshot.simulationId;
         draft.revision = snapshot.stationSetRevision;
         conflict = false;
         conflictPanel.hidden = true;
-        byId("station-edit-label").textContent = draft.id ? `Draft for ${draft.id}; reviewed revision ${draft.revision}` : "Draft will create a new station";
+        ref("station-edit-label").textContent = draft.id ? `Draft for ${draft.id}; reviewed revision ${draft.revision}` : "Draft will create a new station";
         updateControls();
     });
-    byId("station-add-sector").addEventListener("click", () => {
+    runtime.listen(ref("station-add-sector"), "click", () => {
         const sectors = readSectors();
         if (sectors.length < 8) renderSectors([...sectors, { startDegrees: 0, endDegrees: 30, lossDb: 15 }]);
     });
     async function refresh() {
         const started = generation;
         try {
-            const result = await request(`${apiBase}stations`);
+            const result = await request("stations");
             if (started === generation && !saving) accept(result);
         } catch (error) {
             if (started === generation && !saving) status.textContent = `Station updates unavailable (${error.message}). Showing last configuration; retrying...`;
-        } finally { window.setTimeout(refresh, 1000); }
+        } finally { runtime.later(refresh, 1000); }
     }
+    updateControls();
     refresh();
-})();
+}

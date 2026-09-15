@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -35,37 +36,49 @@ type Config struct {
 	// StatusURL is an optional status page link. When set, the standalone manager
 	// page offers an htmx status check that loads its fragment.
 	StatusURL string
+	// Tiles configures the display map tile source. The zero value uses
+	// OpenStreetMap tiles with their attribution.
+	Tiles MapTiles
 	// Logger receives page render failures with component=ui. Nil means
 	// slog.Default(), resolved in New.
 	Logger *slog.Logger
 }
 
+// MapTiles configures the raster tile source of display maps. The browser loads
+// tiles directly, so a host Content-Security-Policy must allow the tile origin in
+// img-src.
+type MapTiles struct {
+	// URL is a Leaflet tile URL template: an absolute path or http(s) URL
+	// containing {z}, {x}, and {y}, for example
+	// "https://tiles.example/{z}/{x}/{y}.png".
+	URL string
+	// Attribution is the plain-text credit shown on the map. It is required with
+	// URL and is never interpreted as HTML.
+	Attribution string
+	// AttributionURL optionally links the credit. It follows the link rules of
+	// Config.
+	AttributionURL string
+}
+
+// defaultTiles is used when Config.Tiles is the zero value.
+var defaultTiles = MapTiles{
+	URL:            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+	Attribution:    "© OpenStreetMap contributors",
+	AttributionURL: "https://www.openstreetmap.org/copyright",
+}
+
 // ComponentConfig configures one rendered component.
 type ComponentConfig struct {
 	// ID is the component root element ID, unique within the host page: an ASCII
-	// letter followed by at most 63 ASCII letters, digits, "-", or "_".
+	// letter followed by at most 63 ASCII letters, digits, "-", or "_". Element IDs
+	// inside the component start with ID followed by "-".
 	ID string
-}
-
-// Resource is one stylesheet or script a host page loads.
-type Resource struct {
-	URL string
-	// Integrity is the subresource integrity value of a third-party resource,
-	// loaded with crossorigin="". It is empty for first-party assets.
-	Integrity string
-}
-
-// Resources lists what a host page loads once, in order, for a component:
-// stylesheets in the head and classic scripts with defer or after the markup.
-type Resources struct {
-	Stylesheets []Resource
-	Scripts     []Resource
 }
 
 // componentID matches valid ComponentConfig.ID values.
 var componentID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
-// validate checks every configured base path and link.
+// validate checks every configured base path, link, and the tile source.
 func validate(config Config) error {
 	if err := urlpath.CheckBase(config.AssetsBase); err != nil {
 		return fmt.Errorf("AssetsBase: %w", err)
@@ -92,6 +105,30 @@ func validate(config Config) error {
 		}
 		if err := checkLink(link.value); err != nil {
 			return fmt.Errorf("%s: %w", link.name, err)
+		}
+	}
+	return checkTiles(config.Tiles)
+}
+
+// checkTiles accepts the zero value or a complete tile source.
+func checkTiles(tiles MapTiles) error {
+	if tiles == (MapTiles{}) {
+		return nil
+	}
+	if tiles.URL == "" || tiles.Attribution == "" {
+		return errors.New("Tiles.URL and Tiles.Attribution are required together")
+	}
+	if err := checkLink(tiles.URL); err != nil {
+		return fmt.Errorf("Tiles.URL: %w", err)
+	}
+	for _, placeholder := range []string{"{z}", "{x}", "{y}"} {
+		if !strings.Contains(tiles.URL, placeholder) {
+			return fmt.Errorf("Tiles.URL %q has no %s placeholder", tiles.URL, placeholder)
+		}
+	}
+	if tiles.AttributionURL != "" {
+		if err := checkLink(tiles.AttributionURL); err != nil {
+			return fmt.Errorf("Tiles.AttributionURL: %w", err)
 		}
 	}
 	return nil

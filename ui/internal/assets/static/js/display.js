@@ -1,8 +1,20 @@
-/* global L */
-(() => {
-    // The component root supplies the public display API base, ending in "/".
-    const apiBase = document.querySelector("[data-ais-display]").dataset.apiBase;
-    const el = id => document.getElementById(id);
+import { mount } from "./runtime.js";
+
+// Leaflet is imported on demand as an ES module, so it never reads or replaces a
+// host page's window.L and a failed load leaves the tables working.
+const leafletModule = "../leaflet/leaflet-src.esm.js";
+
+// mountDisplay mounts a display root rendered by ui.UI.RenderDisplay. It throws
+// when root is not a display root or is already mounted. options.fetch replaces
+// the browser fetch for this instance. The map follows the root's size, also
+// when the root starts hidden.
+export function mountDisplay(root, options = {}) {
+    return mount(root, "data-ais-display", "mountDisplay", options, startDisplay);
+}
+
+function startDisplay(runtime) {
+    const el = runtime.ref;
+    const { root } = runtime;
     const text = (id, value) => { if (el(id).textContent !== value) el(id).textContent = value; };
     const fmt = (v, unit = "", digits = 1) => v == null ? "unavailable" : `${Number(v).toFixed(digits)} ${unit}`.trim();
     const utc = v => v ? v.replace("T", " ").replace("Z", " UTC") : "unavailable";
@@ -13,21 +25,52 @@
     const colors = new Map();
     const color = id => { if (!colors.has(id)) colors.set(id, palette[colors.size % palette.length]); return colors.get(id); };
     const node = (tag, value) => { const n = document.createElement(tag); n.textContent = value; return n; };
+    const view = el("display-view");
     let snapshot = null, selection = [], generation = 0, controller = null, timer = null;
     let fetching = false, immediate = false, framed = false, detail = null, lastFetched = null;
     let historyStation = "", historyGeneration = 0, historyController = null, historyRows = [], historyCursor = null;
     let historyFetching = false, historyBlocked = false, message = null;
     const targets = new Map(), sites = new Map(), coverage = new Map();
-    let map = null;
-    if (window.L) {
-        map = L.map(el("map")).setView([52.02, 3.97], 11);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        }).addTo(map).on("tileerror", () => text("tile-status", "Map tiles unavailable. Observation tables and receiver updates remain active."));
-    } else text("tile-status", "Map library unavailable. Observation tables remain active; reload to retry the map.");
-    el("fit-targets").disabled = !map;
-    el("fit-coverage").disabled = !map;
+    let L = null, map = null, resizeObserver = null;
+    // Destroy invalidates every in-flight generation, so late replies are ignored.
+    runtime.onDestroy(() => {
+        generation++; historyGeneration++;
+        resizeObserver?.disconnect();
+        map?.remove();
+        map = null;
+    });
+
+    const mapElement = el("map");
+    const hasSize = () => mapElement.clientWidth > 0 && mapElement.clientHeight > 0;
+    // frame fits the first complete snapshot once the map has a size. A hidden
+    // root keeps waiting until the resize observer reports one.
+    function frame() {
+        if (!framed && snapshot && map && hasSize()) { fit(false); framed = true; }
+    }
+    // Tile URL and attribution come from ui.Config; the attribution is built as
+    // text so configuration never becomes markup.
+    function attribution() {
+        const { tileAttribution, tileAttributionUrl } = root.dataset;
+        const credit = document.createElement(tileAttributionUrl ? "a" : "span");
+        credit.textContent = tileAttribution;
+        if (tileAttributionUrl) credit.href = tileAttributionUrl;
+        return credit.outerHTML;
+    }
+    import(leafletModule).then(module => {
+        if (runtime.destroyed) return;
+        L = module;
+        map = L.map(mapElement, { trackResize: false }).setView([52.02, 3.97], 11);
+        L.tileLayer(root.dataset.tileTemplate,{ maxZoom: 19, attribution: attribution() })
+            .addTo(map).on("tileerror", () => text("tile-status", "Map tiles unavailable. Observation tables and receiver updates remain active."));
+        resizeObserver = new ResizeObserver(() => { map.invalidateSize(); frame(); });
+        resizeObserver.observe(mapElement);
+        el("fit-targets").disabled = false;
+        el("fit-coverage").disabled = false;
+        if (snapshot) renderMap();
+    }, error => {
+        if (!runtime.destroyed) text("tile-status", `Map library unavailable (${error.message}). Observation tables remain active; reload to retry the map.`);
+    });
+
     const stationName = id => snapshot?.stations.find(s => s.id === id)?.definition.name || id;
     const stationLabel = id => `${stationName(id)} [${id}]`;
     const channels = d => [d.channelA.enabled ? "A" : "A disabled", d.channelB.enabled ? "B" : "B disabled"].join(" / ");
@@ -35,6 +78,7 @@
     const action = (label, run) => ({ label, run });
 
     // Keyed rows preserve focused controls and scroll during ordinary polls.
+    // Row buttons use onclick so each render replaces, not adds, a handler.
     function table(id, rows) {
         const body = el(id), existing = new Map([...body.children].map(r => [r.dataset.key, r]));
         rows.forEach(([key, values], index) => {
@@ -69,7 +113,7 @@
         selection = [...ids].sort(); detail = nextDetail; generation++;
         controller?.abort(); resetHistory(selection.length === 1 ? selection[0] : "");
         text("selection-notice", "Loading selected receiving stations...");
-        el("display-view").classList.add("pending");
+        view.classList.add("ais-pending");
         requestRefresh();
     }
     function renderSelectors() {
@@ -121,8 +165,8 @@
             const label = `${stationLabel(s.id)}: ${d.enabled ? "enabled" : "disabled"}; ${channels(d)}`;
             if (marker.options.title !== label) {
                 const icon = node("span", `${d.enabled ? "BS" : "OFF"} ${d.name} [${s.id.slice(0, 8)}] ${channels(d)}`);
-                icon.className = "station-map-label"; icon.style.borderColor = d.enabled ? color(s.id) : "#65717c";
-                marker.setIcon(L.divIcon({ html: icon, className: "station-icon", iconSize: [160, 30], iconAnchor: [12, 15] }));
+                icon.className = "ais-station-map-label"; icon.style.borderColor = d.enabled ? color(s.id) : "#65717c";
+                marker.setIcon(L.divIcon({ html: icon, className: "ais-station-icon", iconSize: [160, 30], iconAnchor: [12, 15] }));
                 marker.options.title = label;
             }
             marker.setLatLng([d.latitude, d.longitude]);
@@ -163,7 +207,7 @@
             marker.getTooltip().getContent().textContent = `MMSI ${t.mmsi}: ${t.status}, last received ${utc(t.report.receivedAt)}`;
         }
         for (const [id, m] of targets) if (!observed.has(id)) { map.removeLayer(m); targets.delete(id); }
-        if (!framed) { fit(false); framed = true; }
+        frame();
     }
     function fit(withCoverage) {
         if (!map || !snapshot) return;
@@ -293,16 +337,15 @@
     }
     function requestRefresh() {
         if (fetching) { immediate = true; return; }
-        clearTimeout(timer); refresh();
+        runtime.cancel(timer); refresh();
     }
     // One main request at a time. Invalidated selections cannot apply results or
     // errors. Failed reads retain the previous complete snapshot and virtual time.
     async function refresh() {
         fetching = true; immediate = false;
         const token = generation, abort = new AbortController(); controller = abort;
-        const timeout = setTimeout(() => abort.abort(), 7000);
         try {
-            const response = await fetch(`${apiBase}observations?stations=${encodeURIComponent(selection.join(",") || "all")}`, { cache: "no-store", signal: abort.signal });
+            const response = await runtime.fetch(`observations?stations=${encodeURIComponent(selection.join(",") || "all")}`, { signal: abort.signal }, 7000);
             if (token !== generation) return;
             if (response.status === 404 && selection.length) {
                 choose([]); text("selection-notice", "A selected station was removed. Switching to all stations."); return;
@@ -330,32 +373,32 @@
                 resetHistory(); text("history-status", "History station removed. Showing recent selection sample.");
             }
             snapshot = next; historyBlocked = false; lastFetched = new Date();
-            el("display-view").classList.remove("stale", "pending");
+            view.classList.remove("ais-stale", "ais-pending");
             if (el("selection-notice").textContent === "Loading selected receiving stations...") text("selection-notice", "");
             render(); text("fetch-time", `Browser last fetched: ${lastFetched.toLocaleString()}`);
             text("live-status", "Connected. Showing a complete observation snapshot.");
         } catch (error) {
             if (token !== generation) return;
-            el("display-view").classList.add("stale");
+            view.classList.add("ais-stale");
             text("live-status", `Observation updates unavailable (${error.message}). ${lastFetched ? "Entire view is stale; retaining the last complete snapshot." : "No observation data yet."} Retrying...`);
         } finally {
-            clearTimeout(timeout); controller = null; fetching = false;
-            timer = setTimeout(refresh, immediate ? 0 : 1000);
+            controller = null; fetching = false;
+            timer = runtime.later(refresh, immediate ? 0 : 1000);
         }
     }
     // Cursors remain decimal strings and belong to one station and run. The
     // browser stores at most 200 rows plus the immutable, explicitly pinned report.
+    const waiting = () => view.classList.contains("ais-pending") || view.classList.contains("ais-stale");
     async function refreshHistory() {
-        if (historyFetching || !snapshot || !historyStation || historyBlocked || el("pause-history").checked || el("display-view").classList.contains("pending") || el("display-view").classList.contains("stale")) return;
+        if (historyFetching || !snapshot || !historyStation || historyBlocked || el("pause-history").checked || waiting()) return;
         historyFetching = true;
         const token = historyGeneration, selectionToken = generation, run = snapshot.simulationId, id = historyStation;
         const abort = new AbortController(); historyController = abort;
-        const timeout = setTimeout(() => abort.abort(), 7000);
-        const current = () => token === historyGeneration && selectionToken === generation && run === snapshot?.simulationId && id === historyStation && !el("pause-history").checked && !el("display-view").classList.contains("stale") && !el("display-view").classList.contains("pending");
+        const current = () => token === historyGeneration && selectionToken === generation && run === snapshot?.simulationId && id === historyStation && !el("pause-history").checked && !waiting();
         try {
             const query = new URLSearchParams({ simulationId: run, limit: "200" });
             if (historyCursor !== null) query.set("after", historyCursor);
-            const response = await fetch(`${apiBase}stations/${encodeURIComponent(id)}/receptions?${query}`, { cache: "no-store", signal: abort.signal });
+            const response = await runtime.fetch(`stations/${encodeURIComponent(id)}/receptions?${query}`, { signal: abort.signal }, 7000);
             if (!current()) return;
             if (response.status === 409 || response.status === 404) {
                 resetHistory(id); historyBlocked = true;
@@ -381,27 +424,35 @@
         } catch (error) {
             if (current()) text("history-status", `History updates unavailable (${error.message}). Keeping loaded sample; retrying.`);
         } finally {
-            clearTimeout(timeout); historyFetching = false;
+            historyFetching = false;
             if (historyController === abort) historyController = null;
         }
     }
-    el("all-stations").onclick = () => choose([]);
-    el("fit-targets").onclick = () => fit(false);
-    el("fit-coverage").onclick = () => fit(true);
-    for (const id of ["coverage-channel", "show-coverage", "show-stations", "show-lost"]) el(id).onchange = render;
-    el("station-filter").oninput = () => snapshot && renderStations();
-    el("station-sort").onchange = () => snapshot && renderStations();
-    el("message-filter").oninput = renderMessages;
-    el("history-station").onchange = () => { resetHistory(el("history-station").value); render(); refreshHistory(); };
-    el("pause-history").onchange = () => {
+    const listen = runtime.listen;
+    listen(el("all-stations"), "click", () => choose([]));
+    listen(el("fit-targets"), "click", () => fit(false));
+    listen(el("fit-coverage"), "click", () => fit(true));
+    for (const id of ["coverage-channel", "show-coverage", "show-stations", "show-lost"]) listen(el(id), "change", render);
+    listen(el("station-filter"), "input", () => snapshot && renderStations());
+    listen(el("station-sort"), "change", () => snapshot && renderStations());
+    listen(el("message-filter"), "input", renderMessages);
+    listen(el("history-station"), "change", () => { resetHistory(el("history-station").value); render(); refreshHistory(); });
+    listen(el("pause-history"), "change", () => {
         historyGeneration++; historyController?.abort();
         if (!el("pause-history").checked) { render(); refreshHistory(); }
-    };
-    el("copy-nmea").onclick = async () => {
+    });
+    listen(el("copy-nmea"), "click", async () => {
         if (!message) return;
-        try { await navigator.clipboard.writeText(message.sentence); text("copy-status", "Copied exact NMEA, including CRLF."); }
-        catch (error) { el("raw-nmea").focus(); el("raw-nmea").select(); text("copy-status", `Clipboard unavailable (${error.message}). Select and copy the NMEA text.`); }
-    };
-    async function historyLoop() { await refreshHistory(); setTimeout(historyLoop, 1000); }
+        const copied = message;
+        try {
+            await navigator.clipboard.writeText(copied.sentence);
+            if (!runtime.destroyed) text("copy-status", "Copied exact NMEA, including CRLF.");
+        } catch (error) {
+            if (runtime.destroyed) return;
+            el("raw-nmea").focus(); el("raw-nmea").select();
+            text("copy-status", `Clipboard unavailable (${error.message}). Select and copy the NMEA text.`);
+        }
+    });
+    async function historyLoop() { await refreshHistory(); runtime.later(historyLoop, 1000); }
     refresh(); historyLoop();
-})();
+}

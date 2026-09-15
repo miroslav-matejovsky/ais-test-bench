@@ -1,74 +1,75 @@
 {{define "display"}}
-<div id="{{.ID}}" class="ais-display" data-ais-display data-api-base="{{.APIBase}}">
-<div id="display-view">
+<div id="{{.ID}}" class="ais-display" data-ais-display data-api-base="{{.APIBase}}"
+    data-tile-template="{{.Tiles.URL}}"data-tile-attribution="{{.Tiles.Attribution}}" data-tile-attribution-url="{{.Tiles.AttributionURL}}">
+<div class="ais-display-view" data-ref="display-view">
 <p>Received AIS observations. Estimated RF values and scenario labels are simulation data.</p>
-<p id="sim-clock" class="clock">Simulation time: waiting for data</p>
-<p id="live-status" role="status">Connecting...</p>
-<p id="fetch-time">Browser last fetched: waiting</p>
-<p id="selection-notice" role="status"></p>
-<p id="empty-stations" hidden>No base stations configured. Configure sites in the simulator manager.
+<p class="ais-clock" data-ref="sim-clock">Simulation time: waiting for data</p>
+<p class="ais-live-status" data-ref="live-status" role="status">Connecting...</p>
+<p data-ref="fetch-time">Browser last fetched: waiting</p>
+<p class="ais-selection-notice" data-ref="selection-notice" role="status"></p>
+<p data-ref="empty-stations" hidden>No base stations configured. Configure sites in the simulator manager.
     {{with .ManagerURL}}<a href="{{.}}">Open manager</a>{{end}}
 </p>
 <fieldset><legend>Receiving stations (multiple selections show their union)</legend>
-    <button id="all-stations" type="button" aria-pressed="true">All stations</button>
-    <span id="station-selection"></span>
+    <button data-ref="all-stations" type="button" aria-pressed="true">All stations</button>
+    <span class="ais-station-selection" data-ref="station-selection"></span>
 </fieldset>
-<div class="toolbar display-controls">
-    <label>Coverage channel <select id="coverage-channel"><option>A</option><option>B</option></select></label>
-    <label><input id="show-coverage" type="checkbox" checked> Coverage</label>
-    <label><input id="show-stations" type="checkbox" checked> Stations</label>
-    <label><input id="show-lost" type="checkbox"> Lost targets (last known)</label>
-    <button id="fit-targets" type="button">Fit stations and targets</button>
-    <button id="fit-coverage" type="button">Fit coverage</button>
+<div class="ais-toolbar ais-display-controls">
+    <label>Coverage channel <select data-ref="coverage-channel"><option>A</option><option>B</option></select></label>
+    <label><input data-ref="show-coverage" type="checkbox" checked> Coverage</label>
+    <label><input data-ref="show-stations" type="checkbox" checked> Stations</label>
+    <label><input data-ref="show-lost" type="checkbox"> Lost targets (last known)</label>
+    <button data-ref="fit-targets" type="button" disabled>Fit stations and targets</button>
+    <button data-ref="fit-coverage" type="button" disabled>Fit coverage</button>
 </div>
-<p id="coverage-legend">Estimated per-message reception, reference transmitter. Filled: 90%; dashed outline: 50%.</p>
-<p id="tile-status" role="status"></p>
-<div class="display-layout">
-    <div id="map" aria-label="Received AIS target map"></div>
-    <aside id="observation-details" aria-label="Selected observation">
-        <h2 id="detail-title">Station and target details</h2>
-        <pre id="detail-summary">Select a station or target.</pre>
-        <div class="table-scroll"><table id="provenance-table" hidden><caption>Receiver provenance</caption>
+<p data-ref="coverage-legend">Estimated per-message reception, reference transmitter. Filled: 90%; dashed outline: 50%.</p>
+<p data-ref="tile-status" role="status"></p>
+<div class="ais-display-layout">
+    <div class="ais-map" data-ref="map" aria-label="Received AIS target map"></div>
+    <aside class="ais-observation-details" aria-label="Selected observation">
+        <h2 data-ref="detail-title">Station and target details</h2>
+        <pre data-ref="detail-summary">Select a station or target.</pre>
+        <div class="ais-table-scroll"><table data-ref="provenance-table" hidden><caption>Receiver provenance</caption>
             <thead><tr><th>Station</th><th>Last seen UTC</th><th>Transmission match</th><th>Channel / estimated power</th><th>RF revision</th></tr></thead>
-            <tbody id="provenance-body"></tbody>
+            <tbody data-ref="provenance-body"></tbody>
         </table></div>
     </aside>
 </div>
 <p>Markers use received AIS positions only. Grey means stale; dashed means lost and last known. No movement is predicted between reports. Simulation time is virtual UTC; browser fetch time measures connection freshness.</p>
 <h2>Station comparison</h2>
-<div class="toolbar">
-    <label>Filter stations <input id="station-filter" type="search"></label>
-    <label>Sort <select id="station-sort"><option value="name">Name</option><option value="height">Antenna height</option><option value="received">Recent received</option><option value="ratio">Recent opportunity ratio</option></select></label>
+<div class="ais-toolbar">
+    <label>Filter stations <input data-ref="station-filter" type="search"></label>
+    <label>Sort <select data-ref="station-sort"><option value="name">Name</option><option value="height">Antenna height</option><option value="received">Recent received</option><option value="ratio">Recent opportunity ratio</option></select></label>
 </div>
 <p>More negative sensitivity means weaker signals can be received. Fresh and stale counts and last seen are from selected, retained observations; unselected sites show their combined current count. Ratios are simulated opportunities, not measured receiver quality.</p>
-<div class="table-scroll"><table><caption>Receiving capabilities and observations</caption>
+<div class="ais-table-scroll"><table><caption>Receiving capabilities and observations</caption>
     <thead><tr><th>Station / ID</th><th>Status / channels</th><th>Height / gain / feeder loss</th><th>A / B sensitivity</th><th>Fresh / stale / lost</th><th>Recent received / ratio</th><th>Last seen in retained data (UTC)</th></tr></thead>
-    <tbody id="station-comparison"></tbody>
+    <tbody data-ref="station-comparison"></tbody>
 </table></div>
 <h2>Observed targets</h2>
-<p id="target-counts">Waiting for received observations.</p>
-<div class="table-scroll"><table><caption>Selected stations' received AIS targets</caption>
+<p data-ref="target-counts">Waiting for received observations.</p>
+<div class="ais-table-scroll"><table><caption>Selected stations' received AIS targets</caption>
     <thead><tr><th>MMSI</th><th>Scenario label</th><th>Received UTC / age</th><th>State</th><th>Channel / estimated power</th><th>Received navigation</th></tr></thead>
-    <tbody id="target-body"></tbody>
+    <tbody data-ref="target-body"></tbody>
 </table></div>
 <h2>Received-signal inspector</h2>
-<div class="toolbar">
-    <label>Station history <select id="history-station"><option value="">Recent selection sample</option></select></label>
-    <label>MMSI sample filter <input id="message-filter" type="search" inputmode="numeric"></label>
-    <label><input id="pause-history" type="checkbox"> Pause inspector refresh</label>
+<div class="ais-toolbar">
+    <label>Station history <select data-ref="history-station"><option value="">Recent selection sample</option></select></label>
+    <label>MMSI sample filter <input data-ref="message-filter" type="search" inputmode="numeric"></label>
+    <label><input data-ref="pause-history" type="checkbox"> Pause inspector refresh</label>
 </div>
 <p>Filters apply only to the loaded sample, at most 200 successful receptions. Missed decodes appear only in station diagnostic counters. History is not an export.</p>
-<p id="history-status">Recent selected reception sample.</p>
-<div class="table-scroll inspector-scroll"><table><caption>Loaded successful reception sample</caption>
+<p data-ref="history-status">Recent selected reception sample.</p>
+<div class="ais-table-scroll ais-inspector-scroll"><table><caption>Loaded successful reception sample</caption>
     <thead><tr><th>Station</th><th>Received UTC</th><th>MMSI</th><th>Type / channel</th><th>Estimated power / margin</th><th>Transmission / reception ID</th></tr></thead>
-    <tbody id="message-body"></tbody>
+    <tbody data-ref="message-body"></tbody>
 </table></div>
-<section aria-label="Received message details"><h3 id="message-title">Select a received message</h3>
-    <pre id="message-summary"></pre>
-    <label for="raw-nmea">Exact checksummed NMEA (including final CRLF)</label>
-    <textarea id="raw-nmea" readonly rows="3" spellcheck="false"></textarea>
-    <button id="copy-nmea" type="button" disabled>Copy NMEA</button>
-    <span id="copy-status" role="status"></span>
+<section aria-label="Received message details"><h3 data-ref="message-title">Select a received message</h3>
+    <pre data-ref="message-summary"></pre>
+    <label for="{{.ID}}-raw-nmea">Exact checksummed NMEA (including final CRLF)</label>
+    <textarea id="{{.ID}}-raw-nmea" class="ais-raw-nmea" data-ref="raw-nmea" readonly rows="3" spellcheck="false"></textarea>
+    <button data-ref="copy-nmea" type="button" disabled>Copy NMEA</button>
+    <span data-ref="copy-status" role="status"></span>
 </section>
 <noscript>Enable JavaScript to view observations.</noscript>
 </div>

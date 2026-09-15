@@ -2,10 +2,11 @@
 #
 # Use the allowlist for four cases:
 #  - functions staged for future use that are not reachable yet (temporary);
-#  - public library API of the root simulation package that other Go programs
-#    call but the test bench executables do not. Each symbol must be exercised by
-#    a runnable example in simulation/example_test.go (Advance: explicit virtual
-#    steps, which the real-time applications never take);
+#  - public library API that other Go programs call but the test bench
+#    executables do not. Each symbol must be exercised by a runnable example:
+#    Simulator.Advance in simulation/example_test.go (explicit virtual steps, which
+#    the real-time applications never take) and UI.ModuleURL in ui/example_test.go
+#    (host pages import the component module; standalone pages load their own);
 #  - unexported marker methods that seal an event interface. A seal exists to stop
 #    another package from implementing the interface; calling it would defeat the
 #    point, so it is unreachable by construction and always will be;
@@ -14,6 +15,7 @@
 #    and the alternative (dropping it) means dropping the assertion it enables.
 $allow = @(
     'Simulator.Advance'
+    'UI.ModuleURL'
 )
 
 $out = deadcode ./cmd/... 2>&1
