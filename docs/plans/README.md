@@ -24,3 +24,4 @@ Each plan contains assessment.md that contains the assessment of the impact, fea
 
 | Plan | Backlog priority | Outcome |
 | --- | ---: | --- |
+| [Embeddable UI and public runtime](embeddable-ui/README.md) | Unranked | Public handlers, host-page UI components, application logger injection, and thin commands |
