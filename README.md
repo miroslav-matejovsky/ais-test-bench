@@ -41,14 +41,17 @@ unreachable simulator, retries, and replaces its map after a simulator restart.
 
 | Command | Flags and defaults | Routes |
 | --- | --- | --- |
-| `go run ./cmd/ais-testbench` | `-addr localhost:8000` | `/`, `/manager`, `/display`, `/status`, `/api/*`, `/display/api/*` |
-| `go run ./cmd/simulator` | `-addr localhost:8000` | `/` (redirects to `/manager`), `/manager`, `/status`, `/api/*` |
-| `go run ./cmd/display` | `-addr localhost:8081`, `-simulator-url http://localhost:8000` | `/` (redirects to `/display`), `/display`, `/display/api/*` |
+| `go run ./cmd/ais-testbench` | `-addr localhost:8000`, `-base-path ""` | `/`, `/manager`, `/display`, `/status`, `/api/*`, `/display/api/*` |
+| `go run ./cmd/simulator` | `-addr localhost:8000`, `-base-path ""` | `/` (redirects to `/manager`), `/manager`, `/status`, `/api/*` |
+| `go run ./cmd/display` | `-addr localhost:8081`, `-simulator-url http://localhost:8000`, `-base-path ""` | `/` (redirects to `/display`), `/display`, `/display/api/*` |
 
-Listen addresses need an explicit host. The simulator URL is an http or https
-origin with an optional path prefix, without user info, query, or fragment. The
-display reads `{simulator-url}/api/` and links `{simulator-url}/manager`. Each
-process serves `/assets/*` for its pages.
+Listen addresses need an explicit host. `-base-path`, such as `/tools/ais`,
+prefixes every route of that process; it starts with `/`, has no trailing `/`,
+and is empty for the root. The simulator URL is an http or https origin with an
+optional path prefix, without user info, query, or fragment. The display reads
+`{simulator-url}/api/` and links `{simulator-url}/manager`. Each process serves
+`/assets/*` for its pages. SIGINT or SIGTERM drains requests for up to five
+seconds, then stops simulation pacing.
 
 The display bundles Leaflet 1.9.4 and loads OpenStreetMap tiles by default. The
 browser needs internet access only for map tiles; observation tables still work if
@@ -67,9 +70,10 @@ the Go tools. Dependencies are vendored.
 
 The simulator component owns vessel movement, AIS generation, authoritative
 state, recent message storage, its HTTP API, and the manager page. The display
-component owns its HTTP backend, a simulator HTTP client, validation and AIS
-decoding of received observations, and the live page. Browsers call only the origin that served their page;
-the display backend reads the simulator server-side.
+component owns its HTTP backend, a received-traffic source, validation and AIS
+decoding of received observations, and the live page. Browsers call only the
+origin that served their page; the display backend reads the simulator
+server-side.
 
 ```mermaid
 flowchart LR
@@ -79,15 +83,15 @@ flowchart LR
     Driver --> Engine[Public simulation engine]
     GoPrograms[Other Go programs] --> Engine
     DisplayBrowser[Display browser] --> Display[Display backend]
-    Display -- HTTP /api/observations and station receptions --> Simulator
+    Display -- observations and station receptions: in process when combined, HTTP when separate --> Simulator
 ```
 
 Both applications and other Go programs use the same engine implementation. In
 the applications, the real-time driver is its only mutator. In combined mode,
-`internal/app` creates one engine and driver and mounts the API on the public
-listener and on a private `127.0.0.1` listener with an OS-assigned port. The
-display client reads that private listener, so the display consumes NMEA over
-HTTP in both modes and never reads engine state.
+`testbench` creates one engine and driver and passes the simulator to the display
+as an in-process source; no private listener is opened. A separate display
+process reads the same wire contract over HTTP. Both paths pass the same
+validation and AIS decoding, and the display never reads the truth fleet.
 
 Packages, their responsibilities, and their allowed dependencies are defined in
 [`.go-arch-lint.yml`](.go-arch-lint.yml) and enforced by `task arch-lint`.
@@ -172,8 +176,8 @@ for _, report := range reports {
   Its fixed parameters are in `Metadata().Settings.Reception`; they are
   testbench choices, not calibrated predictions. Each station carries 90% and
   50% coverage rings per channel from the same model.
-  The application starts with three demonstration sites, documented in
-  `internal/simdriver`.
+  The applications start with three demonstration sites from
+  `simulator.DemoConfig`.
 - **Receptions:** every report is evaluated at every station. `Observations(stationIDs)`
   returns one consistent snapshot of what the selected stations actually
   received: per-station counters and 60-second rates, one target per MMSI built
@@ -247,6 +251,39 @@ changes simulation results.
 See the runnable [runtime example](simulator/example_test.go), and
 `go doc -all ./simulator`, `go doc -all ./display`, and `go doc -all ./simulatorapi` for the full
 contracts.
+
+## Composing a test bench
+
+Import `testbench` to add the whole bench, manager, display, status, APIs, and
+assets, to an existing Go HTTP server below one prefix:
+
+```go
+bench, err := testbench.New(testbench.Config{
+    Simulation: simulator.DemoConfig(), // or your own simulation.Config
+    Logger:     logger,
+    BasePath:   "/tools/ais",
+})
+if err != nil {
+    return err
+}
+mux.Handle("/tools/ais/", authenticate(bench.Handler())) // no http.StripPrefix
+```
+
+The host owns its server. Supervise `bench.Run(ctx)` next to it and stop serving
+when Run fails. On shutdown, drain requests first, then cancel and join Run.
+`bench.UI()` renders components into host templates with the bench's URLs.
+`Config.Logger` applies to the engine, simulator, display, and UI and replaces
+`Simulation.Logger`. The bench never closes the host's server, listener, or
+clients. `testbench.Serve(ctx, listener, config)`, `simulator.Serve`, and
+`display.Serve` are the standalone conveniences the commands use: they own the
+listener, close it when construction fails, drain requests within five seconds
+while pacing still runs, then stop and join pacing.
+
+The runnable [examples](testbench/example_test.go) cover a host mux with
+middleware, host-template components, a display reading a prefixed remote
+simulator through a custom HTTP client, and two independent benches, each with
+its complete lifecycle. `task consumer` compiles all public examples as an
+external module to prove they need no internal packages.
 
 ## Embedding the UI
 

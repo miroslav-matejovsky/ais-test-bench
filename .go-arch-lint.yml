@@ -20,9 +20,9 @@ vendors:
 
 components:
   # Executables.
-  cmd-ais-testbench: { in: cmd/ais-testbench } # combined simulator and display process
-  cmd-simulator: { in: cmd/simulator } # standalone simulator process
-  cmd-display: { in: cmd/display } # standalone display process
+  cmd-ais-testbench: { in: cmd/ais-testbench } # combined process: flags, logger, signals, listener, testbench.Serve
+  cmd-simulator: { in: cmd/simulator } # standalone simulator process: simulator.Serve
+  cmd-display: { in: cmd/display } # standalone display process: display.Serve
 
   # Public API.
   simulation: { in: simulation } # deterministic engine: fleet, AIS, virtual clock, stations and reception
@@ -30,14 +30,14 @@ components:
   simulatorapi: { in: simulatorapi } # wire DTOs, source requests and error categories
   display: { in: display } # source interface, HTTP source, shared validation and AIS projection, display API
   ui: { in: ui } # URL configuration, components, standalone pages, and embedded assets
+  testbench: { in: testbench } # facade: one bench below a base path, host embedding, and standalone serving
 
   # Internal application support.
-  app: { in: internal/app } # combined composition: public and private API listeners
   simdriver: { in: internal/simdriver } # pacing, serialized commands, clock seam and demo stations
   ais: { in: internal/ais } # AIS type 1 encode and decode, NMEA validation
   ui-assets: { in: ui/internal/assets } # embedded templates, CSS, JavaScript modules, Leaflet, and htmx
   urlpath: { in: internal/urlpath } # canonical public base path validation
-  httpserver: { in: internal/httpserver } # shared HTTP server settings and bounded shutdown
+  httpserver: { in: internal/httpserver } # shared HTTP server settings, supervision, and bounded shutdown
   cli: { in: internal/cli } # shared listen address validation
   logtest: { in: internal/logtest } # test-only in-memory slog handler
 
@@ -46,19 +46,19 @@ components:
 
 deps:
   cmd-ais-testbench:
-    mayDependOn: [app, cli]
+    mayDependOn: [testbench, simulator, cli, urlpath]
   cmd-simulator:
-    mayDependOn: [simulator, cli]
+    mayDependOn: [simulator, cli, urlpath]
   cmd-display:
-    mayDependOn: [display, cli]
+    mayDependOn: [display, cli, urlpath]
 
   simulation:
     mayDependOn: [ais]
 
-  app:
-    mayDependOn: [simdriver, simulator, display, ui, httpserver]
+  testbench:
+    mayDependOn: [simulation, simulator, display, ui, httpserver, urlpath]
   simulator:
-    mayDependOn: [simulation, simdriver, simulatorapi, ui, httpserver]
+    mayDependOn: [simulation, simdriver, simulatorapi, ui, httpserver, urlpath]
   simdriver:
     mayDependOn: [simulation]
   display:
@@ -66,6 +66,6 @@ deps:
   ui:
     mayDependOn: [ui-assets, urlpath]
   ui-host-fixture:
-    mayDependOn: [simulator, simdriver, display, ui]
+    mayDependOn: [simulator, display, ui]
   ais:
     canUse: [go-nmea]

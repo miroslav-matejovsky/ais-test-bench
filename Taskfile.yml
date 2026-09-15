@@ -55,6 +55,12 @@ tasks:
     cmds:
       - pwsh -NoProfile -NonInteractive -File taskfile/deadcode.ps1
 
+  consumer:
+    desc: Compile the public runnable examples as an external module, proving they need no internal packages
+    silent: true
+    cmds:
+      - pwsh -NoProfile -NonInteractive -File taskfile/consumer.ps1
+
   test:
     desc: Run unit tests (saved to .test-results/)
     silent: true
@@ -75,6 +81,7 @@ tasks:
       - task deadcode
       - task arch-lint
       - task lint
+      - task consumer
       - task test
       - echo all done
 

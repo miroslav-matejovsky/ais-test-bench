@@ -63,7 +63,7 @@ func newFixture(t *testing.T) fixture {
 	require.NoError(t, err)
 	clock := &testClock{now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)}
 	driver := simdriver.NewDriver(sim, clock)
-	handler, err := NewStandaloneHandler(&Simulator{driver: driver, logger: slog.New(slog.DiscardHandler), baseLogger: slog.New(slog.DiscardHandler)})
+	handler, err := NewStandaloneHandler(&Simulator{driver: driver, logger: slog.New(slog.DiscardHandler), baseLogger: slog.New(slog.DiscardHandler)}, "")
 	require.NoError(t, err)
 	return fixture{sim: sim, clock: clock, driver: driver, handler: handler}
 }
@@ -291,4 +291,34 @@ func TestStandaloneRoutes(t *testing.T) {
 	require.Equal(t, "/manager", rec.Header().Get("Location"))
 	rec = serve(f.handler, http.MethodGet, "/?view=stations", "")
 	require.Equal(t, "/manager?view=stations", rec.Header().Get("Location"))
+}
+
+func TestStandaloneRoutesBelowBasePath(t *testing.T) {
+	f := newFixture(t)
+	handler, err := NewStandaloneHandler(&Simulator{driver: f.driver, logger: slog.New(slog.DiscardHandler), baseLogger: slog.New(slog.DiscardHandler)}, "/tools/ais")
+	require.NoError(t, err)
+
+	manager := serve(handler, http.MethodGet, "/tools/ais/manager", "")
+	require.Equal(t, http.StatusOK, manager.Code)
+	for _, s := range []string{`<a href="/tools/ais/manager">Manager</a>`, `data-api-base="/tools/ais/api/"`, `hx-get="/tools/ais/status"`, `href="/tools/ais/assets/css/ui.css"`} {
+		require.Contains(t, manager.Body.String(), s)
+	}
+	require.Equal(t, "run-1", decode[simulatorapi.Fleet](t, serve(handler, http.MethodGet, "/tools/ais/api/vessels", "")).SimulationID)
+	require.Equal(t, http.StatusOK, serve(handler, http.MethodGet, "/tools/ais/assets/js/ui.js", "").Code)
+	require.Equal(t, http.StatusOK, serve(handler, http.MethodGet, "/tools/ais/status", "").Code)
+	rec := serve(handler, http.MethodGet, "/tools/ais/?view=stations", "")
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, "/tools/ais/manager?view=stations", rec.Header().Get("Location"))
+	rec = serve(handler, http.MethodGet, "/tools/ais/api?view=1", "")
+	require.GreaterOrEqual(t, rec.Code, http.StatusMovedPermanently)
+	require.Less(t, rec.Code, http.StatusBadRequest)
+	require.Equal(t, "/tools/ais/api/?view=1", rec.Header().Get("Location"), "redirects keep the prefix")
+	for _, path := range []string{"/", "/manager", "/api/vessels", "/assets/js/ui.js"} {
+		require.Equal(t, http.StatusNotFound, serve(handler, http.MethodGet, path, "").Code, path)
+	}
+
+	for _, base := range []string{"/", "/tools/", "tools", "/tools/../ais"} {
+		_, err := NewStandaloneHandler(&Simulator{driver: f.driver, logger: slog.New(slog.DiscardHandler), baseLogger: slog.New(slog.DiscardHandler)}, base)
+		require.ErrorContains(t, err, "base path", base)
+	}
 }

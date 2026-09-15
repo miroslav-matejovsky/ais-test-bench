@@ -5,8 +5,10 @@
 #  - public library API that other Go programs call but the test bench
 #    executables do not. Each symbol must be exercised by a runnable example:
 #    Simulator.Advance in simulation/example_test.go (explicit virtual steps, which
-#    the real-time applications never take) and UI.ModuleURL in ui/example_test.go
-#    (host pages import the component module; standalone pages load their own);
+#    the real-time applications never take), UI.ModuleURL in ui/example_test.go
+#    (host pages import the component module; standalone pages load their own), and
+#    Bench.UI in testbench/example_test.go (host templates render components; the
+#    command serves only standalone pages);
 #  - unexported marker methods that seal an event interface. A seal exists to stop
 #    another package from implementing the interface; calling it would defeat the
 #    point, so it is unreachable by construction and always will be;
@@ -16,6 +18,7 @@
 $allow = @(
     'Simulator.Advance'
     'UI.ModuleURL'
+    'Bench.UI'
 )
 
 $out = deadcode ./cmd/... 2>&1

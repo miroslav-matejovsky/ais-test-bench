@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/miroslav-matejovsky/ais-testbench/display"
-	"github.com/miroslav-matejovsky/ais-testbench/internal/simdriver"
 	"github.com/miroslav-matejovsky/ais-testbench/simulator"
 	"github.com/miroslav-matejovsky/ais-testbench/ui"
 )
@@ -162,7 +161,7 @@ func run(ctx context.Context, addr string) error {
 // mountInstance mounts one simulator API and display API below /{name}/,
 // protected by the host token middleware.
 func mountInstance(mux *http.ServeMux, logger *slog.Logger, name string) (instance, error) {
-	sim, err := simulator.New(simulator.Config{Simulation: simdriver.NewConfig(), Logger: logger})
+	sim, err := simulator.New(simulator.Config{Simulation: simulator.DemoConfig(), Logger: logger})
 	if err != nil {
 		return instance{}, err
 	}

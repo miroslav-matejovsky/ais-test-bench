@@ -78,7 +78,7 @@ func TestIndependentSimulatorsUseTheirOwnLoggers(t *testing.T) {
 	firstConfig, secondConfig := runtimeConfig(), runtimeConfig()
 	firstConfig.Logger, secondConfig.Logger = firstLogger, secondLogger
 	firstSim, secondSim := stoppedSimulator(t, firstConfig), stoppedSimulator(t, secondConfig)
-	secondHandler, err := NewStandaloneHandler(secondSim)
+	secondHandler, err := NewStandaloneHandler(secondSim, "")
 	require.NoError(t, err)
 
 	putCount(t.Context(), firstSim.API(), "/vessels")

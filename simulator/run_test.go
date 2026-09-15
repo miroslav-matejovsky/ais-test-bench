@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/miroslav-matejovsky/ais-testbench/simulation"
 	"github.com/miroslav-matejovsky/ais-testbench/simulatorapi"
 )
 
@@ -28,18 +29,20 @@ func get(t *testing.T, url string) []byte {
 	return body
 }
 
-func TestRunServesManagerAndAPI(t *testing.T) {
+func TestServeManagerAndAPIBelowBasePath(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, slog.New(slog.DiscardHandler), ln)
+		done <- Serve(ctx, ln, StandaloneConfig{Simulation: DemoConfig(), Logger: slog.New(slog.DiscardHandler), BasePath: "/tools/ais"})
 	}()
 
 	// The listener is already bound, so requests queue until Serve accepts them.
-	base := "http://" + ln.Addr().String()
-	require.Contains(t, string(get(t, base+"/manager")), "<h1>Manager</h1>")
+	base := "http://" + ln.Addr().String() + "/tools/ais"
+	manager := string(get(t, base+"/manager"))
+	require.Contains(t, manager, "<h1>Manager</h1>")
+	require.Contains(t, manager, `data-api-base="/tools/ais/api/"`)
 	var metadata simulatorapi.Metadata
 	require.NoError(t, json.Unmarshal(get(t, base+"/api/metadata"), &metadata))
 	var fleet simulatorapi.Fleet
@@ -61,17 +64,31 @@ func (l failingListener) Accept() (net.Conn, error) { return nil, errors.New("ac
 func (l failingListener) Close() error              { close(l.closed); return nil }
 func (l failingListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
 
-func TestServeFailureClosesListenerAndStopsEngine(t *testing.T) {
-	f := newFixture(t)
-	ln := failingListener{closed: make(chan struct{})}
+func TestServeClosesListenerOnFailure(t *testing.T) {
+	discard := slog.New(slog.DiscardHandler)
+	tests := []struct {
+		name    string
+		config  StandaloneConfig
+		wantErr string
+		wantIs  error
+	}{
+		{name: "invalid engine config", config: StandaloneConfig{Logger: discard}, wantIs: simulation.ErrInvalid},
+		{name: "invalid base path", config: StandaloneConfig{Simulation: runtimeConfig().Simulation, Logger: discard, BasePath: "/tools/"}, wantErr: "base path"},
+		{name: "serving", config: StandaloneConfig{Simulation: runtimeConfig().Simulation, Logger: discard}, wantErr: "accept failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ln := failingListener{closed: make(chan struct{})}
 
-	// Serve returns only after the pacing loop has exited.
-	err := Serve(t.Context(), ln, &Simulator{driver: f.driver, logger: slog.New(slog.DiscardHandler)}, f.handler)
+			// Serve returns only after the pacing loop has exited.
+			err := Serve(t.Context(), ln, tt.config)
 
-	require.ErrorContains(t, err, "accept failed")
-	select {
-	case <-ln.closed:
-	default:
-		t.Fatal("listener was not closed")
+			if tt.wantIs != nil {
+				require.ErrorIs(t, err, tt.wantIs)
+			} else {
+				require.ErrorContains(t, err, tt.wantErr)
+			}
+			<-ln.closed
+		})
 	}
 }

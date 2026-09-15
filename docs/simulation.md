@@ -64,7 +64,7 @@ specific real-world behaviors that make AIS software hard to get right:
   predictions; see `simulation.Metadata().Settings.Reception` and the
   package doc for exact sources and caveats.
 - **Multiple stations disagree, like a real base station network.** The
-  demonstration scenario (`internal/simdriver`) places three stations around
+  demonstration scenario (`simulator.DemoConfig`) places three stations around
   Rotterdam's approach with different antenna heights and sensitivities, one
   with a shadow sector modeling a harbor obstruction. This mirrors how a
   Vessel Traffic Service (VTS) or AIS network operator combines several

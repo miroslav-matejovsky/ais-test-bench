@@ -54,8 +54,7 @@
 // applies the change. A valid change the driver cannot apply, such as a backlog
 // beyond the catch-up limit, is logged and returns 500; a stopped runtime returns
 // 503. The handler holds no
-// state besides the simulator, so combined composition can mount one API handler
-// on several listeners.
+// state besides the simulator, so several handlers can serve one simulator.
 //
 // Station routes add, replace, and remove receiving sites with expected run and
 // station-set revisions. They use a separate 64 KiB JSON reader, require every
@@ -64,8 +63,7 @@
 // encode uint64 receiving identities as decimal strings and coverage as GeoJSON
 // MultiPolygon cut at the antimeridian. Reception pages have independent station
 // cursors and explicit eviction gaps. These routes expose received NMEA without
-// decoding navigation or changing the display component. All routes are available
-// through combined composition's public and private listeners.
+// decoding navigation or changing the display component.
 //
 // Hosts mount Simulator.API below a public API base and strip that base once:
 //
@@ -75,15 +73,33 @@
 // resolves against the request URL and keeps the public prefix. The API sets no
 // CORS or authentication policy, so host middleware can protect reads and writes.
 //
-// NewStandaloneHandler composes the standalone simulator at the root path: the
-// API at /api/, the manager page, status, assets at /assets/, and a root redirect
-// to /manager that keeps the query. Its navigation lists only the manager.
+// # Standalone serving
 //
-// Package-level Run creates the demonstration configuration on the system clock
-// with the given logger and serves NewStandaloneHandler. Serve runs Simulator.Run next to an HTTP server on a
-// caller-supplied listener and owns that listener. On
-// cancellation or a serving or pacing failure, HTTP drains within
-// a five-second shutdown timeout, then the pacing loop is stopped and joined.
-// Failures are returned with their context. HTTP deadlines and shutdown use real
-// time at every simulation speed, including pause.
+// NewStandaloneHandler composes the standalone simulator below an optional path
+// prefix: the API at {base}/api/, the manager page, status, assets at
+// {base}/assets/, and a {base}/ redirect to the manager that keeps the query. Its
+// navigation lists only the manager. The handler matches full request paths.
+//
+// Serve creates a simulator from StandaloneConfig and serves that handler next to
+// Simulator.Run on a caller-bound listener, which it owns and closes, also when
+// construction fails. On cancellation or a serving or pacing failure, HTTP
+// requests drain within a five-second shutdown timeout while pacing still runs,
+// then pacing is cancelled and joined. Failures are returned with their context.
+// HTTP deadlines and shutdown use real time at every simulation speed, including
+// pause.
+//
+// # Demonstration scenario
+//
+// DemoConfig returns the commands' engine configuration: a fresh random identity
+// and seed, the current real instant as virtual start, one vessel, and speed 1.
+// The reference transmitter is 12.5 W at 10 m with 2 dBi gain and 1 dB feeder
+// loss. Three explicitly synthetic stations demonstrate the Rotterdam scenario;
+// they are chosen scenario values, not real installations or measurements:
+//
+//	Name              Lat/Lon        Height  Sensitivity A/B  Gain/Feeder  Shadow
+//	Rotterdam coast   51.98 / 4.05   25 m    -110 dBm         3 / 2 dB     none
+//	Northern coast    52.12 / 4.24   40 m    -112 dBm         3 / 2 dB     none
+//	Harbour receiver  51.95 / 4.14   15 m    -108 dBm         2 / 3 dB     270-330 degrees, 15 dB
+//
+// All stations and channels start enabled without noise penalty or extra drop.
 package simulator

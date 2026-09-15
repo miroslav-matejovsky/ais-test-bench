@@ -27,7 +27,7 @@
 // Callers own sources supplied to New and clients supplied in HTTPConfig. Neither
 // is closed or mutated by the library. CloseIdleConnections releases transports
 // owned by HTTPSource or by the NewClient convenience constructor after requests
-// finish. Run owns its listener and closes only the client's owned connections.
+// finish. Serve owns its listener and closes only the client's owned connections.
 // All reads are concurrency-safe. Source methods must honor cancellation and
 // return owned snapshots that remain valid after subsequent reads. Cancellation
 // is checked before and after reading and projection; CPU-bound conversion may
@@ -87,10 +87,13 @@
 // contract returns 502 and a server log entry. A failed request never returns
 // partial data, so the browser keeps its last complete view.
 //
-// NewStandaloneHandler serves the display at the root path: the API at
-// /display/api/, the page, assets at /assets/, and a root redirect to /display
-// that keeps the query. StandaloneConfig.ManagerURL is an explicit, optional
-// navigation link and is never inferred from the source.
+// NewStandaloneHandler serves the display below an optional path prefix: the API
+// at {base}/display/api/, the page, assets at {base}/assets/, and a {base}/
+// redirect to the page that keeps the query. StandaloneConfig.ManagerURL is an
+// explicit, optional navigation link and is never inferred from the source. Serve
+// runs that handler on a caller-bound listener until cancellation or a serving
+// failure, drains requests within five seconds, and closes only owned idle
+// connections.
 //
 // # Logging
 //
@@ -103,8 +106,8 @@
 // Normal operation is quiet: successful reads and 4xx responses emit nothing, and
 // neither does a request whose client went away. A consumed 5xx source failure
 // logs one Warn record with the operation, path, status, and error; a failed
-// response write logs at Error. Both use the request context. Run logs start and
-// stop at Info and HTTP server errors at Error.
+// response write logs at Error. Both use the request context. Serve logs start
+// and stop at Info and HTTP server errors at Error.
 //
 // # Examples
 //

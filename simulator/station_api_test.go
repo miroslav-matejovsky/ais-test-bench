@@ -261,7 +261,7 @@ func TestStationConcurrentEditsReturnOwnSnapshot(t *testing.T) {
 }
 
 func TestStationRuntimeDefaultsReceiveInitialReports(t *testing.T) {
-	config := simdriver.NewConfig()
+	config := DemoConfig()
 	config.Speed = 0
 	sim, err := simulation.New(config)
 	require.NoError(t, err)

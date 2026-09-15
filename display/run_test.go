@@ -2,16 +2,20 @@ package display_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/miroslav-matejovsky/ais-testbench/display"
+	"github.com/miroslav-matejovsky/ais-testbench/ui"
 )
 
 func TestStandaloneRoutes(t *testing.T) {
@@ -68,9 +72,91 @@ func TestStandaloneRoutes(t *testing.T) {
 	require.ErrorContains(t, err, "ManagerURL")
 	_, err = display.NewStandaloneHandler(display.StandaloneConfig{})
 	require.ErrorContains(t, err, "client is required")
+	_, err = display.NewStandaloneHandler(display.StandaloneConfig{Client: client, BasePath: "/tools/"})
+	require.ErrorContains(t, err, "base path")
 }
 
-func TestRunServesPageWithoutSimulator(t *testing.T) {
+func TestStandaloneRoutesBelowBasePath(t *testing.T) {
+	u := newUpstream(t)
+	client, err := display.NewClient(u.server.URL + "/api/")
+	require.NoError(t, err)
+	t.Cleanup(client.CloseIdleConnections)
+	handler, err := display.NewStandaloneHandler(display.StandaloneConfig{
+		Client: client, Logger: slog.New(slog.DiscardHandler), BasePath: "/tools/ais",
+		Tiles: ui.MapTiles{URL: "/tiles/{z}/{x}/{y}.png", Attribution: "Local tiles"},
+	})
+	require.NoError(t, err)
+	serve := func(target string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		return rec
+	}
+
+	page := serve("/tools/ais/display")
+	require.Equal(t, http.StatusOK, page.Code)
+	for _, s := range []string{`<a href="/tools/ais/display">Display</a>`, `data-api-base="/tools/ais/display/api/"`, `src="/tools/ais/assets/js/standalone.js"`, `data-tile-template="/tiles/{z}/{x}/{y}.png"`} {
+		require.Contains(t, page.Body.String(), s)
+	}
+	require.Contains(t, serve("/tools/ais/display/api/observations?stations=all").Body.String(), `"simulationId":"run-1"`)
+	require.Equal(t, http.StatusOK, serve("/tools/ais/assets/js/display.js").Code)
+	redirect := serve("/tools/ais/?stations=s1")
+	require.Equal(t, http.StatusFound, redirect.Code)
+	require.Equal(t, "/tools/ais/display?stations=s1", redirect.Header().Get("Location"))
+	for _, path := range []string{"/", "/display", "/display/api/observations", "/assets/js/display.js"} {
+		require.Equal(t, http.StatusNotFound, serve(path).Code, path)
+	}
+}
+
+// idleTracker is a borrowed transport that records CloseIdleConnections.
+type idleTracker struct {
+	closed atomic.Bool
+}
+
+func (*idleTracker) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("no network in this test")
+}
+func (i *idleTracker) CloseIdleConnections() { i.closed.Store(true) }
+
+func TestServeClosesListenerAndOnlyOwnedConnections(t *testing.T) {
+	transport := &idleTracker{}
+	source, err := display.NewHTTPSource(display.HTTPConfig{APIBase: "http://simulator.test/api/", Client: &http.Client{Transport: transport}})
+	require.NoError(t, err)
+	client, err := display.New(source)
+	require.NoError(t, err)
+	ln := &closeListener{Listener: listen(t), closed: make(chan struct{})}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	require.NoError(t, display.Serve(ctx, ln, display.StandaloneConfig{Client: client, Logger: slog.New(slog.DiscardHandler)}))
+	<-ln.closed
+	require.False(t, transport.closed.Load(), "a borrowed HTTP client stays open")
+
+	failed := &closeListener{Listener: listen(t), closed: make(chan struct{})}
+	err = display.Serve(t.Context(), failed, display.StandaloneConfig{Logger: slog.New(slog.DiscardHandler)})
+	require.ErrorContains(t, err, "client is required")
+	<-failed.closed
+}
+
+// closeListener signals Close on closed.
+type closeListener struct {
+	net.Listener
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (l *closeListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return l.Listener.Close()
+}
+
+func listen(t *testing.T) net.Listener {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	return ln
+}
+
+func TestServeShowsPageWithoutSimulator(t *testing.T) {
 	stopped := httptest.NewServer(http.NotFoundHandler())
 	stopped.Close()
 	client, err := display.NewClient(stopped.URL + "/api/")
@@ -80,7 +166,7 @@ func TestRunServesPageWithoutSimulator(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- display.Run(ctx, ln, display.StandaloneConfig{Client: client, Logger: slog.New(slog.DiscardHandler)})
+		done <- display.Serve(ctx, ln, display.StandaloneConfig{Client: client, Logger: slog.New(slog.DiscardHandler)})
 	}()
 
 	// The listener is already bound, so requests queue until serving starts.

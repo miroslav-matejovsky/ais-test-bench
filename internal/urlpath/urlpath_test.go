@@ -38,3 +38,27 @@ func TestCheckBase(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckPrefix(t *testing.T) {
+	for prefix, valid := range map[string]bool{
+		"":           true,
+		"/tools":     true,
+		"/tools/ais": true,
+		"/":          false,
+		"/tools/":    false,
+		"tools":      false,
+		"//tools":    false,
+		"/tools/..":  false,
+		"/a b":       false,
+		"/tools?x=1": false,
+	} {
+		t.Run(prefix, func(t *testing.T) {
+			err := urlpath.CheckPrefix(prefix)
+			if valid {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
