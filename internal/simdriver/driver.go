@@ -2,10 +2,8 @@ package simdriver
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	mathrand "math/rand/v2"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -46,6 +44,9 @@ func (SystemClock) NewTicker(interval time.Duration) (<-chan time.Time, func()) 
 	return ticker.C, ticker.Stop
 }
 
+// ErrStopped rejects commands after the pacing loop has terminated.
+var ErrStopped = errors.New("simulation driver stopped")
+
 // Driver paces one public simulation engine with measured real time and
 // serializes count and speed commands with that pacing. It holds no simulation
 // state; all generation, history, and metadata come from the engine.
@@ -55,47 +56,8 @@ type Driver struct {
 	started atomic.Bool
 
 	mu       sync.Mutex // Serializes settlement and commands.
+	stopped  bool       // Protected by mu; terminal after Run returns.
 	baseline time.Time  // Real instant up to which elapsed time was delivered.
-}
-
-// NewConfig returns the application's engine configuration: a fresh random
-// identity and seed, so runs are distinguishable, the current real instant as
-// the virtual start, one vessel, real-time speed, the reference transmitter, and
-// the three demonstration stations.
-func NewConfig() simulation.Config {
-	return simulation.Config{
-		ID: rand.Text(), StartTime: time.Now(), Seed: mathrand.Uint64(),
-		InitialVesselCount: 1, Speed: 1,
-		Transmitter: simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1},
-		Stations:    demoStations(),
-	}
-}
-
-// demoStations returns three explicitly synthetic receiving sites around the
-// Rotterdam scenario. They are chosen scenario values, not real installations
-// or field measurements. All channels start enabled without impairment.
-func demoStations() []simulation.StationDefinition {
-	channel := func(sensitivity float64) simulation.ReceiverChannel {
-		return simulation.ReceiverChannel{Enabled: true, SensitivityDBm: sensitivity}
-	}
-	return []simulation.StationDefinition{
-		{
-			Name: "Rotterdam coast", Latitude: 51.98, Longitude: 4.05, Enabled: true,
-			AntennaHeightMeters: 25, ReceiveGainDBi: 3, FeederLossDB: 2,
-			ChannelA: channel(-110), ChannelB: channel(-110),
-		},
-		{
-			Name: "Northern coast", Latitude: 52.12, Longitude: 4.24, Enabled: true,
-			AntennaHeightMeters: 40, ReceiveGainDBi: 3, FeederLossDB: 2,
-			ChannelA: channel(-112), ChannelB: channel(-112),
-		},
-		{
-			Name: "Harbour receiver", Latitude: 51.95, Longitude: 4.14, Enabled: true,
-			AntennaHeightMeters: 15, ReceiveGainDBi: 2, FeederLossDB: 3,
-			ChannelA: channel(-108), ChannelB: channel(-108),
-			ShadowSectors: []simulation.ShadowSector{{StartDegrees: 270, EndDegrees: 330, LossDB: 15}},
-		},
-	}
 }
 
 // NewDriver returns a driver for sim on clock, using the current real instant
@@ -114,6 +76,11 @@ func (d *Driver) Run(ctx context.Context) error {
 	if !d.started.CompareAndSwap(false, true) {
 		return errors.New("simulation driver already started")
 	}
+	defer func() {
+		d.mu.Lock()
+		d.stopped = true
+		d.mu.Unlock()
+	}()
 	ticks, stop := d.clock.NewTicker(Heartbeat)
 	defer stop()
 	for {
@@ -136,11 +103,14 @@ func (d *Driver) Run(ctx context.Context) error {
 // simulation.ErrInvalid and change nothing. A settlement failure leaves the
 // count unapplied but keeps delivered chunks.
 func (d *Driver) SetCount(ctx context.Context, count int) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped {
+		return ErrStopped
+	}
 	if count < 0 || count > simulation.MaxVessels {
 		return fmt.Errorf("%w: vessel count must be between 0 and %d: %d", simulation.ErrInvalid, simulation.MaxVessels, count)
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	if err := d.settleLocked(ctx); err != nil {
 		return fmt.Errorf("settle before count change: %w", err)
 	}
@@ -155,11 +125,14 @@ func (d *Driver) SetCount(ctx context.Context, count int) error {
 // simulation.ErrInvalid and change nothing. A settlement failure leaves the speed
 // unapplied but keeps delivered chunks.
 func (d *Driver) SetSpeed(ctx context.Context, speed float64) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped {
+		return ErrStopped
+	}
 	if err := simulation.ValidateSpeed(speed); err != nil {
 		return err
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	if err := d.settleLocked(ctx); err != nil {
 		return fmt.Errorf("settle before speed change: %w", err)
 	}
@@ -178,11 +151,14 @@ func (d *Driver) SetSpeed(ctx context.Context, speed float64) error {
 // settlement. The returned clock/settings are captured with the new configuration
 // before releasing the command lock. A settlement failure keeps delivered chunks.
 func (d *Driver) AddStation(ctx context.Context, simulationID string, expectedRevision uint64, definition simulation.StationDefinition) (string, simulation.StationConfiguration, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped {
+		return "", simulation.StationConfiguration{}, ErrStopped
+	}
 	if err := simulation.ValidateStation(definition); err != nil {
 		return "", simulation.StationConfiguration{}, err
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	if err := d.prepareStationEdit(ctx, simulationID, expectedRevision, ""); err != nil {
 		return "", simulation.StationConfiguration{}, err
 	}
@@ -196,11 +172,14 @@ func (d *Driver) AddStation(ctx context.Context, simulationID string, expectedRe
 // UpdateStation is AddStation for an edit of station id. An unknown id wraps
 // simulation.ErrNotFound and also returns before settling.
 func (d *Driver) UpdateStation(ctx context.Context, simulationID string, expectedRevision uint64, id string, definition simulation.StationDefinition) (simulation.StationConfiguration, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped {
+		return simulation.StationConfiguration{}, ErrStopped
+	}
 	if err := simulation.ValidateStation(definition); err != nil {
 		return simulation.StationConfiguration{}, err
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	if err := d.prepareStationEdit(ctx, simulationID, expectedRevision, id); err != nil {
 		return simulation.StationConfiguration{}, err
 	}
@@ -229,6 +208,9 @@ func (d *Driver) RemoveStation(ctx context.Context, simulationID string, expecte
 // station, then settles. The driver is the only mutator, so the checks stay
 // valid while d.mu is held. Called with d.mu held.
 func (d *Driver) prepareStationEdit(ctx context.Context, simulationID string, expectedRevision uint64, id string) error {
+	if d.stopped {
+		return ErrStopped
+	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("station edit: %w", err)
 	}
@@ -264,6 +246,12 @@ func (d *Driver) settle(ctx context.Context) error {
 // dropped. A backlog above MaxCatchUp virtual time fails before any delivery.
 // Called with d.mu held.
 func (d *Driver) settleLocked(ctx context.Context) error {
+	if d.stopped {
+		return ErrStopped
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	now := d.clock.Now()
 	elapsed := now.Sub(d.baseline)
 	if elapsed <= 0 {

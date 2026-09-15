@@ -17,6 +17,11 @@
 // invalid. The same implementation, Config, and ordered calls produce the same
 // sentences, timestamps, MMSIs, and sequences.
 //
+// Config.Logger is the run's application logger; nil means slog.Default(). The
+// engine itself emits no records, returns every failure, and never changes the
+// process default logger. Owners such as simulator.New use this logger when
+// their own is nil. Logger choice and levels never affect results.
+//
 // # Receiving stations
 //
 // A station is a synthetic shore receiving site: position, antenna height,

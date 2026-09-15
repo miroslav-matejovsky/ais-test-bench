@@ -3,19 +3,6 @@
 // history, metadata, and the virtual clock, is the public package
 // github.com/miroslav-matejovsky/ais-testbench/simulation.
 //
-// NewConfig returns the application's engine configuration: a fresh random
-// identity and seed, the current real instant as virtual start, one vessel,
-// speed 1, and the application presets. The reference transmitter is 12.5 W at
-// 10 m with 2 dBi gain and 1 dB feeder loss. Three explicitly synthetic stations
-// demonstrate the Rotterdam scenario; they are chosen scenario values, not real
-// installations or measurements:
-//
-//	Name              Lat/Lon        Height  Sensitivity A/B  Gain/Feeder  Shadow
-//	Rotterdam coast   51.98 / 4.05   25 m    -110 dBm         3 / 2 dB     none
-//	Northern coast    52.12 / 4.24   40 m    -112 dBm         3 / 2 dB     none
-//	Harbour receiver  51.95 / 4.14   15 m    -108 dBm         2 / 3 dB     270-330 degrees, 15 dB
-//
-// All stations and channels start enabled without noise penalty or extra drop.
 // NewDriver wraps one engine and takes the current real instant from its Clock
 // as baseline.
 //
@@ -48,6 +35,10 @@
 // Fleet, History, Metadata, and Stations return committed engine copies
 // without settling, so metadata can trail pacing by one heartbeat plus
 // processing time.
+//
+// Run marks the driver stopped before returning. Later commands return ErrStopped
+// without changing the engine; snapshots remain readable. Count and speed writes
+// check cancellation even with no elapsed time or while paused.
 //
 // Clock is the real-time seam and SystemClock the production clock. Real
 // instants keep their monotonic reading until elapsed time is computed; UTC

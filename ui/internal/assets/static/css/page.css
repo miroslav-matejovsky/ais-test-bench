@@ -1,0 +1,26 @@
+/* Standalone page layout. Component styles are in ui.css. */
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+body:has(.ais-display) { max-width: 100rem; }
+
+header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    align-items: baseline;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.5rem;
+}
+
+nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+main > button { font: inherit; padding: 0.5rem 0.75rem; cursor: pointer; }

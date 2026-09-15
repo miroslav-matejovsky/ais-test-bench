@@ -1,0 +1,100 @@
+/*
+Component styles for manager and display roots. Every selector below starts at
+.ais-manager or .ais-display, so host elements keep their own styles. Leaflet's
+stylesheet uses its own leaflet- class prefix.
+
+Hosts may set these optional custom properties on a component root or any
+ancestor:
+  --ais-accent          pressed buttons and focus outlines
+  --ais-border          table rules and panel borders
+  --ais-surface         code block and table header background
+  --ais-error           field errors
+  --ais-warning         stale and notice text
+  --ais-map-height      display map and details panel height (default 65vh)
+  --ais-map-min-height  display map minimum height (default 24rem)
+
+The display switches to one column when its root is narrower than 48rem, so
+its root needs a definite inline size from the host layout.
+*/
+@import url("../leaflet/leaflet.css");
+
+.ais-manager, .ais-display { display: block; min-width: 0; }
+.ais-display { container-type: inline-size; }
+.ais-manager :is(button, input, select, textarea), .ais-display :is(button, input, select, textarea) { font: inherit; }
+.ais-manager :is(button, input), .ais-display :is(button, input) { padding: 0.5rem 0.75rem; }
+.ais-manager button, .ais-display button { cursor: pointer; }
+.ais-manager button:disabled, .ais-display button:disabled { cursor: wait; }
+.ais-manager input[type="number"], .ais-display input[type="number"] { width: 6rem; }
+.ais-manager :is(button, input, select, textarea, summary):focus-visible, .ais-display :is(button, input, select, textarea):focus-visible {
+    outline: 3px solid var(--ais-accent, #145da0);
+    outline-offset: 2px;
+}
+.ais-manager .ais-toolbar, .ais-display .ais-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.ais-manager pre, .ais-display pre { padding: 1rem; background: var(--ais-surface, #f1f5f7); overflow-x: auto; }
+.ais-manager .ais-table-scroll, .ais-display .ais-table-scroll { overflow-x: auto; }
+.ais-manager table, .ais-display table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+.ais-manager caption, .ais-display caption { text-align: left; font-weight: 600; }
+.ais-manager :is(th, td), .ais-display :is(th, td) { text-align: left; vertical-align: top; padding: 0.5rem; border-bottom: 1px solid var(--ais-border, #ccc); }
+.ais-manager td button, .ais-display td button { margin: 0.2rem; }
+.ais-manager .ais-clock, .ais-display .ais-clock { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Manager */
+.ais-manager pre { min-height: 5rem; }
+.ais-manager .ais-clock.ais-stale { color: var(--ais-warning, #8a4b00); }
+.ais-manager .ais-presets { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.ais-manager .ais-station-form fieldset { min-width: 0; margin: 0.75rem 0; }
+.ais-manager .ais-station-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
+.ais-manager .ais-station-grid label, .ais-manager .ais-field-error { display: block; }
+.ais-manager .ais-station-grid input:not([type="checkbox"]) { width: 100%; box-sizing: border-box; }
+.ais-manager .ais-field-error { color: var(--ais-error, #a02020); white-space: pre-line; }
+.ais-manager [aria-invalid="true"] { outline: 2px solid var(--ais-error, #a02020); }
+.ais-manager summary { cursor: pointer; padding: 0.75rem 0; }
+
+/* Display: tables remain usable when map resources or observation reads fail. */
+.ais-display .ais-display-view, .ais-display fieldset { min-width: 0; }
+.ais-display .ais-station-selection { display: inline-flex; flex-wrap: wrap; gap: 0.5rem; }
+.ais-display .ais-station-selection label { border-left: 4px solid; padding: 0.3rem; }
+.ais-display :is(select, textarea) { padding: 0.4rem; max-width: 100%; }
+.ais-display input[type="search"] { max-width: 100%; box-sizing: border-box; }
+.ais-display button[aria-pressed="true"] { background: var(--ais-accent, #154f78); color: white; }
+.ais-display th { background: var(--ais-surface, #f1f5f7); }
+.ais-display pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ais-display .ais-display-controls { margin: 1rem 0; }
+.ais-display .ais-display-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr); gap: 1rem; }
+.ais-display .ais-map {
+    height: var(--ais-map-height, 65vh);
+    min-height: var(--ais-map-min-height, 24rem);
+    background: #dceaf0;
+    border: 1px solid var(--ais-border, #a8bcc7);
+}
+.ais-display .ais-observation-details {
+    min-width: 0;
+    max-height: var(--ais-map-height, 65vh);
+    overflow: auto;
+    border: 1px solid var(--ais-border, #a8bcc7);
+    padding: 0 0.75rem;
+}
+.ais-display .ais-raw-nmea { display: block; width: 100%; box-sizing: border-box; font-family: monospace; }
+.ais-display .ais-display-view.ais-stale { border-left: 5px solid var(--ais-warning, #9b5100); padding-left: 0.75rem; }
+.ais-display .ais-display-view.ais-stale .ais-map { filter: grayscale(0.7); }
+.ais-display .ais-display-view.ais-stale .ais-live-status, .ais-display .ais-selection-notice { color: var(--ais-warning, #854200); font-weight: 600; }
+.ais-display .ais-display-view.ais-pending .ais-live-status::after { content: " Loading a new selection; displayed data is from the previous selection."; }
+.ais-display .ais-station-map-label {
+    display: block;
+    width: max-content;
+    max-width: 13rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: white;
+    color: #172c3c;
+    border: 3px solid;
+    padding: 3px 6px;
+    font-weight: 600;
+}
+.ais-display .ais-inspector-scroll { max-height: 25rem; }
+@container (max-width: 48rem) {
+    .ais-display .ais-display-layout { grid-template-columns: minmax(0, 1fr); }
+    .ais-display .ais-observation-details { max-height: none; }
+    .ais-display .ais-map { height: 50vh; min-height: 18rem; }
+}

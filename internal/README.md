@@ -1,23 +1,16 @@
 # Internal packages
 
-The simulator component uses the public root package `simulation` for the
-authoritative fleet, latest reports, in-memory messages, and metadata.
-`simdriver` is the real-time driver that paces that engine. `simulator` holds
-the HTTP API, engine-to-wire conversion, manager composition, and runtime.
-`simulatorapi` holds the simulator API wire types shared with its consumers.
-The simulator API exposes atomic station configuration and received-observation
-snapshots, bounded reception paging, and revision-checked station commands. The
-manager owns station editing; reception decisions remain in the engine.
+`simdriver` paces the public `simulation` engine and serializes commands for the
+public `simulator` runtime. It owns the internal clock seam and catch-up limits.
+Public `simulator`, `simulatorapi`, `display`, `ui`, and `testbench` packages own
+runtime APIs, wire contracts, received-traffic projection, embeddable rendering,
+and composition.
 
-The display component is `display`: a simulator HTTP client, the validated
-projection of received observations and station reception history with NMEA
-decoding, the display API, and its runtime. It never imports simulator state or
-runtime packages and never reads the truth fleet.
-
-Shared packages: `ais` encodes and decodes position reports, `ui` renders
-stateless HTML pages and serves static assets, `httpserver` runs HTTP servers
-with bounded shutdown, and `cli` validates listen addresses. `app` composes both
-components for the combined executable.
+Shared packages: `ais` encodes and decodes position reports, `httpserver` runs
+HTTP servers with bounded shutdown and supervises serving next to pacing,
+`urlpath` validates public base paths and prefixes, and `cli` validates listen
+addresses. `logtest` is a test-only in-memory slog handler for logger injection
+tests.
 
 Package documentation lives in `doc.go`. Allowed package dependencies are
 defined in [`.go-arch-lint.yml`](../.go-arch-lint.yml).

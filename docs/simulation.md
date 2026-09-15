@@ -38,7 +38,7 @@ can import `simulation` directly.
   a vessel no station hears is not visible, and a missed report leaves the
   last known position stale.
 - **History and APIs.** The latest 1,000 reports and the newest receptions
-  per station are retained and queryable over HTTP (`internal/simulatorapi`)
+  per station are retained and queryable over HTTP (`simulatorapi`)
   or in-process (`simulation.History`, `simulation.ReceptionHistory`). See
   the root [`README.md`](../README.md) for the full API and Go package
   reference.
@@ -64,7 +64,7 @@ specific real-world behaviors that make AIS software hard to get right:
   predictions; see `simulation.Metadata().Settings.Reception` and the
   package doc for exact sources and caveats.
 - **Multiple stations disagree, like a real base station network.** The
-  demonstration scenario (`internal/simdriver`) places three stations around
+  demonstration scenario (`simulator.DemoConfig`) places three stations around
   Rotterdam's approach with different antenna heights and sensitivities, one
   with a shadow sector modeling a harbor obstruction. This mirrors how a
   Vessel Traffic Service (VTS) or AIS network operator combines several

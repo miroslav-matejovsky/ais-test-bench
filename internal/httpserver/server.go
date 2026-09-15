@@ -48,6 +48,43 @@ func (s *Server) Done() <-chan struct{} {
 	return s.done
 }
 
+// Run serves handler on ln next to work until ctx is cancelled, serving fails,
+// or work returns. It then drains in-flight requests within ShutdownTimeout of
+// real time while work keeps running, so draining requests can still use it.
+// Only then is work's context cancelled and work joined. Work's context keeps
+// ctx's values but not its cancellation. A nil work runs nothing. Run owns ln
+// and returns serving, shutdown, and work failures joined, or nil after a clean
+// shutdown.
+func Run(ctx context.Context, logger *slog.Logger, ln net.Listener, handler http.Handler, work func(context.Context) error) error {
+	server := Serve(logger, ln, handler)
+	workCtx, stopWork := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopWork()
+	var workDone chan struct{} // Nil without work, so the select never picks it.
+	var workErr error          // Read only after workDone closes.
+	if work != nil {
+		workDone = make(chan struct{})
+		go func() {
+			workErr = work(workCtx)
+			close(workDone)
+		}()
+	}
+
+	select {
+	case <-server.Done():
+	case <-workDone:
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownTimeout)
+	defer cancel()
+	err := server.Shutdown(shutdownCtx)
+	stopWork()
+	if workDone != nil {
+		<-workDone
+	}
+	return errors.Join(err, workErr)
+}
+
 // Shutdown stops accepting connections and waits for in-flight requests until
 // ctx ends, then closes the remaining connections. It waits for serving to end
 // and also returns the serving failure when serving ended for another reason.

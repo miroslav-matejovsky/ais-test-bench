@@ -1,0 +1,13 @@
+{{define "page:title"}}Home{{end}}
+
+{{define "page:content"}}
+<h1>AIS Test Bench</h1>
+<ul>
+    {{- with .ManagerURL}}
+    <li><a href="{{.}}">Manager</a>: vessel count, speed, stations, and recent AIS messages.</li>
+    {{- end}}
+    {{- with .DisplayURL}}
+    <li><a href="{{.}}">Display</a>: live view of received AIS observations.</li>
+    {{- end}}
+</ul>
+{{end}}

@@ -255,9 +255,10 @@ func TestCancellationStopsBetweenChunks(t *testing.T) {
 	sim, clock, driver := newDriver(t)
 	clock.Add(3 * time.Second)
 
-	// The engine checks the context before and after each 600ms chunk at 1x,
+	// The driver first checks cancellation; the engine then checks before and
+	// after each 600ms chunk at 1x,
 	// which holds at most one tick.
-	err := driver.SetCount(&cancelAfter{Context: t.Context(), checks: 4}, 2)
+	err := driver.SetCount(&cancelAfter{Context: t.Context(), checks: 5}, 2)
 
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, virtualStart.Add(1200*time.Millisecond), sim.Metadata().Time.Now, "complete chunks stay delivered")
@@ -350,44 +351,4 @@ func TestStationRunIdentityAndCancelledPause(t *testing.T) {
 	_, _, err = driver.AddStation(ctx, "run-1", 1, site("Cancelled"))
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, before, sim.StationConfiguration())
-}
-
-func TestNewConfigStartsFreshRealTimeRun(t *testing.T) {
-	before := time.Now()
-	a, b := simdriver.NewConfig(), simdriver.NewConfig()
-
-	require.NotEmpty(t, a.ID)
-	require.NotEqual(t, a.ID, b.ID)
-	require.False(t, a.StartTime.Before(before))
-	require.Equal(t, 1, a.InitialVesselCount)
-	require.InDelta(t, 1.0, a.Speed, 0)
-	require.Equal(t, simulation.TransmitterProfile{PowerWatts: 12.5, HeightMeters: 10, GainDBi: 2, FeederLossDB: 1}, a.Transmitter)
-	sim, err := simulation.New(a)
-	require.NoError(t, err)
-
-	stations := sim.Stations().Stations
-	require.Len(t, stations, 3)
-	for i, want := range []struct {
-		name        string
-		lat, lon    float64
-		height      float64
-		sensitivity float64
-		sectors     int
-	}{
-		{name: "Rotterdam coast", lat: 51.98, lon: 4.05, height: 25, sensitivity: -110},
-		{name: "Northern coast", lat: 52.12, lon: 4.24, height: 40, sensitivity: -112},
-		{name: "Harbour receiver", lat: 51.95, lon: 4.14, height: 15, sensitivity: -108, sectors: 1},
-	} {
-		got := stations[i].Definition
-		require.Equal(t, want.name, got.Name)
-		require.InDelta(t, want.lat, got.Latitude, 0)
-		require.InDelta(t, want.lon, got.Longitude, 0)
-		require.InDelta(t, want.height, got.AntennaHeightMeters, 0)
-		require.True(t, got.Enabled)
-		for _, channel := range []simulation.ReceiverChannel{got.ChannelA, got.ChannelB} {
-			require.Equal(t, simulation.ReceiverChannel{Enabled: true, SensitivityDBm: want.sensitivity}, channel)
-		}
-		require.Len(t, got.ShadowSectors, want.sectors)
-	}
-	require.Equal(t, []simulation.ShadowSector{{StartDegrees: 270, EndDegrees: 330, LossDB: 15}}, stations[2].Definition.ShadowSectors)
 }

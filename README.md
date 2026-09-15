@@ -41,17 +41,21 @@ unreachable simulator, retries, and replaces its map after a simulator restart.
 
 | Command | Flags and defaults | Routes |
 | --- | --- | --- |
-| `go run ./cmd/ais-testbench` | `-addr localhost:8000` | `/`, `/manager`, `/display`, `/status`, `/api/*`, `/display/api/*` |
-| `go run ./cmd/simulator` | `-addr localhost:8000` | `/` (redirects to `/manager`), `/manager`, `/status`, `/api/*` |
-| `go run ./cmd/display` | `-addr localhost:8081`, `-simulator-url http://localhost:8000` | `/` (redirects to `/display`), `/display`, `/display/api/*` |
+| `go run ./cmd/ais-testbench` | `-addr localhost:8000`, `-base-path ""` | `/`, `/manager`, `/display`, `/status`, `/api/*`, `/display/api/*` |
+| `go run ./cmd/simulator` | `-addr localhost:8000`, `-base-path ""` | `/` (redirects to `/manager`), `/manager`, `/status`, `/api/*` |
+| `go run ./cmd/display` | `-addr localhost:8081`, `-simulator-url http://localhost:8000`, `-base-path ""` | `/` (redirects to `/display`), `/display`, `/display/api/*` |
 
-Listen addresses need an explicit host. The simulator URL is an http or https
-origin without user info, path, query, or fragment. Each process serves
-`/static/*` for its pages.
+Listen addresses need an explicit host. `-base-path`, such as `/tools/ais`,
+prefixes every route of that process; it starts with `/`, has no trailing `/`,
+and is empty for the root. The simulator URL is an http or https origin with an
+optional path prefix, without user info, query, or fragment. The display reads
+`{simulator-url}/api/` and links `{simulator-url}/manager`. Each process serves
+`/assets/*` for its pages. SIGINT or SIGTERM drains requests for up to five
+seconds, then stops simulation pacing.
 
-The display uses Leaflet 1.9.4 and OpenStreetMap tiles. The browser needs internet
-access to load Leaflet and map tiles; observation tables still work if either
-cannot load. Application templates, CSS, JavaScript, and
+The display bundles Leaflet 1.9.4 and loads OpenStreetMap tiles by default. The
+browser needs internet access only for map tiles; observation tables still work if
+the map cannot load. Application templates, CSS, JavaScript modules, Leaflet, and
 htmx are embedded in the executables. No Node build is required.
 
 ```text
@@ -60,15 +64,19 @@ task all
 
 Development checks use the Go version in `go.mod`, Task, PowerShell,
 golangci-lint, deadcode, gotestsum, and go-arch-lint. `task go-tools` installs
-the Go tools. Dependencies are vendored.
+the Go tools. Dependencies are vendored. `task all` also runs `task consumer`,
+which compiles the public examples as an external module. The browser checks in
+[`ui/testdata`](ui/testdata/README.md) are run manually against a local app and
+host fixture.
 
 ## Architecture
 
 The simulator component owns vessel movement, AIS generation, authoritative
 state, recent message storage, its HTTP API, and the manager page. The display
-component owns its HTTP backend, a simulator HTTP client, validation and AIS
-decoding of received observations, and the live page. Browsers call only the origin that served their page;
-the display backend reads the simulator server-side.
+component owns its HTTP backend, a received-traffic source, validation and AIS
+decoding of received observations, and the live page. Browsers call only the
+origin that served their page; the display backend reads the simulator
+server-side.
 
 ```mermaid
 flowchart LR
@@ -78,15 +86,15 @@ flowchart LR
     Driver --> Engine[Public simulation engine]
     GoPrograms[Other Go programs] --> Engine
     DisplayBrowser[Display browser] --> Display[Display backend]
-    Display -- HTTP /api/observations and station receptions --> Simulator
+    Display -- observations and station receptions: in process when combined, HTTP when separate --> Simulator
 ```
 
 Both applications and other Go programs use the same engine implementation. In
 the applications, the real-time driver is its only mutator. In combined mode,
-`internal/app` creates one engine and driver and mounts the API on the public
-listener and on a private `127.0.0.1` listener with an OS-assigned port. The
-display client reads that private listener, so the display consumes NMEA over
-HTTP in both modes and never reads engine state.
+`testbench` creates one engine and driver and passes the simulator to the display
+as an in-process source; no private listener is opened. A separate display
+process reads the same wire contract over HTTP. Both paths pass the same
+validation and AIS decoding, and the display never reads the truth fleet.
 
 Packages, their responsibilities, and their allowed dependencies are defined in
 [`.go-arch-lint.yml`](.go-arch-lint.yml) and enforced by `task arch-lint`.
@@ -114,8 +122,8 @@ every report takes about 2.1 ms with full histories and 1,000 observed targets,
 and 7.9 ms when all 100 MMSIs are replaced every second. Both stay below the
 10 ms that 100x allows. The largest observation snapshot, 16 stations and 1,000
 targets, encodes to 5.2 MiB, under the display's 8 MiB bound; one display request
-at that size takes about 180 ms. Rerun with
-`go test ./simulation ./internal/app -run '^$' -bench . -benchmem`.
+at that size takes about 180 ms through the separate-process HTTP path. Rerun with
+`go test ./simulation ./simulator -run '^$' -bench . -benchmem`.
 
 The latest 1,000 reports are retained in memory, oldest first. Reducing the fleet
 removes active vessels while preserving retained reports. Setting the count to
@@ -171,8 +179,8 @@ for _, report := range reports {
   Its fixed parameters are in `Metadata().Settings.Reception`; they are
   testbench choices, not calibrated predictions. Each station carries 90% and
   50% coverage rings per channel from the same model.
-  The application starts with three demonstration sites, documented in
-  `internal/simdriver`.
+  The applications start with three demonstration sites from
+  `simulator.DemoConfig`.
 - **Receptions:** every report is evaluated at every station. `Observations(stationIDs)`
   returns one consistent snapshot of what the selected stations actually
   received: per-station counters and 60-second rates, one target per MMSI built
@@ -208,6 +216,131 @@ for _, report := range reports {
 
 The runnable examples cover initial creation, batches, stepping, speed scaling,
 pause, station edits, and observations: `go doc -all ./simulation`.
+
+## Public runtime and display sources
+
+Import `simulator` to own an engine and its serialized real-time driver. `New`
+accepts `Config{Simulation: engineConfig, Logger: logger}` and starts no server or
+background work. Mount `sim.API()` below your public API base, for example
+`mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))`, and supervise
+`sim.Run(ctx)` alongside your server. Drain HTTP requests before canceling and
+joining pacing. Run is single-use; after it ends, commands return
+`simulatorapi.ErrUnavailable` while committed snapshots remain readable.
+
+Import `display` to validate and decode received traffic. `display.New(sim)` reads
+that local runtime without a listener. `display.NewHTTPSource(display.HTTPConfig{
+APIBase: "https://example.test/tools/ais/api/", Client: httpClient})` supplies the same wire contract over HTTP;
+pass it to `display.New(source)`. The client borrows the source, and the HTTP source
+borrows a supplied HTTP client. Clean up only owned connections after requests end.
+`display.NewClient(apiBase)` conveniently owns its own HTTP source.
+`display.NewHandler(display.Config{Client: client})` serves the display API at
+local routes; mount it with `http.StripPrefix` as well.
+
+Both sources pass through the same semantic validation and AIS decoding. HTTP
+sources also validate JSON framing and bound response bodies. Source errors wrap
+public `simulatorapi` categories and their original causes.
+
+Logging: library packages never create a process logger or call `slog.SetDefault`;
+the commands create the stderr logger. `simulation.Config.Logger`,
+`simulator.Config.Logger`, and the `display` handler constructors accept a
+`*slog.Logger`; nil means `slog.Default()` at construction. A non-nil
+`simulator.Config.Logger` replaces the nested engine logger. Components add
+`component=simulator` or `component=display` and keep caller attributes, groups,
+and levels. Normal operation is quiet: only consumed 5xx failures, failed response
+writes, HTTP server errors, and standalone start/stop are logged. `Run` returns its
+failures to the caller. The engine emits no records, and logger choice never
+changes simulation results.
+
+See the runnable [runtime example](simulator/example_test.go), and
+`go doc -all ./simulator`, `go doc -all ./display`, and `go doc -all ./simulatorapi` for the full
+contracts.
+
+## Composing a test bench
+
+Import `testbench` to add the whole bench, manager, display, status, APIs, and
+assets, to an existing Go HTTP server below one prefix:
+
+```go
+bench, err := testbench.New(testbench.Config{
+    Simulation: simulator.DemoConfig(), // or your own simulation.Config
+    Logger:     logger,
+    BasePath:   "/tools/ais",
+})
+if err != nil {
+    return err
+}
+mux.Handle("/tools/ais/", authenticate(bench.Handler())) // no http.StripPrefix
+```
+
+The host owns its server. Supervise `bench.Run(ctx)` next to it and stop serving
+when Run fails. On shutdown, drain requests first, then cancel and join Run.
+`bench.UI()` renders components into host templates with the bench's URLs.
+`Config.Logger` applies to the engine, simulator, display, and UI and replaces
+`Simulation.Logger`. The bench never closes the host's server, listener, or
+clients. `testbench.Serve(ctx, listener, config)`, `simulator.Serve`, and
+`display.Serve` are the standalone conveniences the commands use: they own the
+listener, close it when construction fails, drain requests within five seconds
+while pacing still runs, then stop and join pacing.
+
+The runnable [examples](testbench/example_test.go) cover a host mux with
+middleware, host-template components, a display reading a prefixed remote
+simulator through a custom HTTP client, and two independent benches, each with
+its complete lifecycle. `task consumer` compiles all public examples as an
+external module to prove they need no internal packages.
+
+## Embedding the UI
+
+Import `ui` to serve the manager and display inside your own HTTP server and pages.
+`ui.New(ui.Config{...})` takes explicit public URLs. `ManagerAPIBase`,
+`DisplayAPIBase`, and `AssetsBase` are absolute paths ending in `/`. Optional
+`HomeURL`, `ManagerURL`, `DisplayURL`, and `StatusURL` links are absolute paths or
+http(s) URLs. Public URLs include any reverse proxy prefix; nothing is inferred
+from request paths or forwarded headers. Dot segments, percent-encoded
+separators, queries or fragments in bases, and unsafe link schemes are rejected
+at construction.
+
+Every handler uses local routes. Mount each once and strip its public prefix:
+
+| Handler | Local routes | Mount example |
+| --- | --- | --- |
+| `sim.API()` | `/vessels`, `/time`, `/stations`, `/observations`, ... | `mux.Handle("/tools/ais/api/", http.StripPrefix("/tools/ais/api", sim.API()))` |
+| `display.NewHandler(...)` | `/observations`, `/stations/{id}/receptions` | `mux.Handle("/tools/ais/display/api/", http.StripPrefix("/tools/ais/display/api", h))` |
+| `u.Assets()` | `/css/ui.css`, `/js/ui.js`, `/leaflet/*` | `mux.Handle("/tools/ais/assets/", http.StripPrefix("/tools/ais/assets", u.Assets()))` |
+| `u.ManagerPage()`, `u.DisplayPage()`, `u.HomePage()`, `u.StatusPage()` | Any path; GET and HEAD | `mux.Handle("/tools/ais/manager", page)` |
+
+`u.RenderManager(w, ui.ComponentConfig{ID: "fleet"})` and `u.RenderDisplay` write
+only the component root for a host template, without a document shell or scripts.
+Element IDs inside a component start with its ID, so one page can hold several
+managers and displays. Link `u.StylesheetURL()` once and mount each root from your
+own module script, importing `u.ModuleURL()`:
+
+```js
+import { mountManager, mountDisplay } from "/tools/ais/assets/js/ui.js";
+
+const fleet = mountManager(document.getElementById("fleet"), { fetch: hostFetch });
+const map = mountDisplay(document.getElementById("map"));
+// On host navigation or component removal:
+fleet.destroy();
+map.destroy();
+```
+
+The optional `fetch` receives each request URL and options and can add host
+authentication or CSRF headers; the default is the browser's same-origin fetch.
+Mounting a live root again throws. `destroy()` aborts requests, clears timers,
+removes listeners and the map, and restores the rendered markup, so the root can
+be mounted again. A write aborted by `destroy()` may already be applied; a new
+mount reads the current state.
+
+Styles are scoped below `.ais-manager` and `.ais-display`. Optional custom
+properties `--ais-accent`, `--ais-border`, `--ais-surface`, `--ais-error`,
+`--ais-warning`, `--ais-map-height`, and `--ais-map-min-height` theme them. The
+display imports its bundled Leaflet module on mount and never touches a host
+`window.L`; the map follows its root's size, also when the root starts hidden.
+Components need no inline scripts or htmx. A Content-Security-Policy must allow
+the tile origin in `img-src`; `ui.Config.Tiles` replaces the OpenStreetMap tile
+URL and attribution. Wrap handlers in your authentication, authorization, and CSRF
+middleware; the library sets no CORS or authentication policy. See the runnable
+[UI example](ui/example_test.go).
 
 ## Simulator API
 
@@ -246,7 +379,7 @@ A fleet vessel is `{ "mmsi": ..., "name": "...", "typeId": "cargo", "report": {
 data is only in the NMEA sentence. A history message is `{ "sequence": 1,
 "mmsi": ..., "timestamp": "...", "sentence": "..." }`; bounds are `null` for an
 empty history. Sequences restart with every new `simulationId`. See
-`internal/simulatorapi` for the full contract and polling guidance.
+`simulatorapi` for the full contract and polling guidance.
 
 `PUT` requires `Content-Type: application/json` and either an integer count from
 0 to 100 or a speed of 0 (pause) or 0.01 to 100 in 0.01 steps. Malformed input
@@ -272,7 +405,7 @@ Observation targets contain only received NMEA navigation, with per-station last
 receipt provenance. Scenario names/categories remain separately identified. Coverage
 is estimated GeoJSON MultiPolygon for the published reference transmitter, with
 90% and 50% contours per channel, split at the antimeridian. Signal power/margin
-are model estimates. See `internal/simulatorapi` package documentation for complete
+are model estimates. See `simulatorapi` package documentation for complete
 request examples, field units, selection, retention, and lifecycle rules.
 
 ## Display API
@@ -323,7 +456,7 @@ run 409. An unreachable simulator or a timeout returns 503; any invalid simulato
 response returns 502. The page then keeps its last complete view, marks the entire
 view stale, shows that updates are unavailable, and retries. A new `simulationId`
 clears markers, selections, details, and history cursors before drawing the new run.
-See `internal/display` package
+See `display` package
 documentation for the full validation rules.
 
 Movement follows the current speed and course over the earth's surface. Random
